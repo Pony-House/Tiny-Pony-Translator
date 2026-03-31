@@ -1,34 +1,77 @@
-import Versions from './components/Versions'
-import electronLogo from './assets/electron.svg'
+import { useState } from 'react';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import Settings from './components/Settings';
+import Translator from './components/Translator';
 
-function App() {
-  const ipcHandle = () => window.electron.ipcRenderer.send('ping')
+export default function App() {
+  // UI State
+  const [view, setView] = useState('translator'); // 'translator' or 'settings'
+  const [apiMode, setApiMode] = useState('libre');
+
+  // Settings State
+  const [config, setConfig] = useState({
+    /** @type {import('./components/Settings').LibreConfig} */
+    libre: { protocol: 'http', ip: '127.0.0.1:5000' },
+    /** @type {import('./components/Settings').LmStudioConfig} */
+    lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
+  });
 
   return (
-    <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Powered by electron-vite</div>
-      <div className="text">
-        Build an Electron app with <span className="react">React</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
+    <div className="container-xxl py-4 bg-light min-vh-100">
+      {/* Navigation Header */}
+      <nav className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+        <div className="d-flex align-items-center gap-4">
+          <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
+          <div className="btn-group shadow-sm">
+            <button
+              className={`btn ${view === 'translator' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setView('translator')}
+            >
+              Translator
+            </button>
+            <button
+              className={`btn ${view === 'settings' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setView('settings')}
+            >
+              Settings
+            </button>
+          </div>
         </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-            Send IPC
-          </a>
-        </div>
-      </div>
-      <Versions></Versions>
-    </>
-  )
-}
 
-export default App
+        {view === 'translator' && (
+          <div className="btn-group" role="group">
+            <input
+              type="radio"
+              className="btn-check"
+              name="apiMode"
+              id="libreMode"
+              checked={apiMode === 'libre'}
+              onChange={() => setApiMode('libre')}
+            />
+            <label className="btn btn-sm btn-outline-secondary" htmlFor="libreMode">
+              LibreTranslate
+            </label>
+
+            <input
+              type="radio"
+              className="btn-check"
+              name="apiMode"
+              id="lmMode"
+              checked={apiMode === 'lmstudio'}
+              onChange={() => setApiMode('lmstudio')}
+            />
+            <label className="btn btn-sm btn-outline-secondary" htmlFor="lmMode">
+              LM Studio
+            </label>
+          </div>
+        )}
+      </nav>
+
+      {view === 'settings' ? (
+        <Settings setConfig={setConfig} config={config} />
+      ) : (
+        <Translator apiMode={apiMode} config={config} />
+      )}
+    </div>
+  );
+}
