@@ -1,20 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Settings from './components/Settings';
 import Translator from './components/Translator';
 
 export default function App() {
+  /**
+   * @returns {import('./components/Settings').SettingsParams}
+   */
+  const getInitialConfig = () => {
+    /** @type {string | null} */
+    const savedConfig = localStorage.getItem('appConfig');
+    if (savedConfig) {
+      try {
+        return JSON.parse(savedConfig);
+      } catch {
+        // Fallback to default if JSON is corrupted
+      }
+    }
+    return {
+      libre: { protocol: 'http', ip: '127.0.0.1:5000' },
+      lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
+    };
+  };
+
   // UI State
   const [view, setView] = useState('translator'); // 'translator' or 'settings'
   const [apiMode, setApiMode] = useState('libre');
 
   // Settings State
-  const [config, setConfig] = useState({
-    /** @type {import('./components/Settings').LibreConfig} */
-    libre: { protocol: 'http', ip: '127.0.0.1:5000' },
-    /** @type {import('./components/Settings').LmStudioConfig} */
-    lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
-  });
+  const [config, setConfig] = useState(getInitialConfig);
+
+  useEffect(() => {
+    localStorage.setItem('appConfig', JSON.stringify(config));
+  }, [config]);
 
   return (
     <div className="container-xxl py-4 bg-light min-vh-100">

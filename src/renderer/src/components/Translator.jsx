@@ -35,6 +35,18 @@ export default function Translator({ apiMode, config }) {
   const [targetLang, setTargetLang] = useState(getDefaultTargetLang);
   const [libreLanguages, setLibreLanguages] = useState([]);
 
+  // Alternatives State
+  const [translationOptions, setTranslationOptions] = useState(() => {
+    /** @type {string | null} */
+    const saved = sessionStorage.getItem('translationOptions');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState(() => {
+    /** @type {string | null} */
+    const saved = sessionStorage.getItem('selectedOptionIndex');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
   // LM Studio Specifics
   const [lmInstruction, setLmInstruction] = useState(
     () => localStorage.getItem('lmInstruction') || DEFAULT_LM_INSTRUCTION,
@@ -45,7 +57,6 @@ export default function Translator({ apiMode, config }) {
   const [lmHeader, setLmHeader] = useState(() => localStorage.getItem('lmHeader') || '');
 
   const [isTranslating, setIsTranslating] = useState(false);
-
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -55,6 +66,11 @@ export default function Translator({ apiMode, config }) {
   useEffect(() => {
     sessionStorage.setItem('translatedText', translatedText);
   }, [translatedText]);
+
+  useEffect(() => {
+    sessionStorage.setItem('translationOptions', JSON.stringify(translationOptions));
+    sessionStorage.setItem('selectedOptionIndex', selectedOptionIndex.toString());
+  }, [translationOptions, selectedOptionIndex]);
 
   useEffect(() => {
     localStorage.setItem('sourceLang', sourceLang);
@@ -108,6 +124,7 @@ export default function Translator({ apiMode, config }) {
   const executeTranslation = async (text) => {
     if (!text.trim()) {
       setTranslatedText('');
+      setTranslationOptions([]);
       return;
     }
 
@@ -122,13 +139,23 @@ export default function Translator({ apiMode, config }) {
             source: sourceLang,
             target: targetLang,
             format: 'text',
+            alternatives: 3, // Requesting alternatives from LibreTranslate
           }),
           headers: { 'Content-Type': 'application/json' },
         });
         const data = await res.json();
-        setTranslatedText(data.translatedText || '');
+
+        /** @type {string} */
+        const mainTranslation = data.translatedText || '';
+        /** @type {string[]} */
+        const alts = data.alternatives || [];
+        /** @type {string[]} */
+        const options = mainTranslation ? [mainTranslation, ...alts] : [];
+
+        setTranslationOptions(options);
+        setSelectedOptionIndex(0);
+        setTranslatedText(mainTranslation);
       } else {
-        // LM Studio API local endpoint
         /** @type {string} */
         const systemPrompt =
           sourceLang === 'auto'
@@ -149,10 +176,12 @@ export default function Translator({ apiMode, config }) {
         });
         const data = await res.json();
         setTranslatedText(data.choices[0]?.message?.content || '');
+        setTranslationOptions([]);
       }
     } catch (err) {
       console.error('Translation error:', err);
       setTranslatedText('Error: Connection failed. Check your server settings.');
+      setTranslationOptions([]);
     } finally {
       setIsTranslating(false);
     }
@@ -164,6 +193,12 @@ export default function Translator({ apiMode, config }) {
    */
   const handleSourceChange = (value) => {
     setSourceText(value);
+
+    if (value.trim() === '') {
+      setTranslationOptions([]);
+      setTranslatedText('');
+    }
+
     if (apiMode === 'libre' && libreLanguages.length > 0) {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => executeTranslation(value), 1000);
@@ -180,7 +215,17 @@ export default function Translator({ apiMode, config }) {
     setTargetLang(sourceLang);
     setSourceText(translatedText);
     setTranslatedText(sourceText);
-    // Auto-translation call removed to prevent glitches
+    setTranslationOptions([]);
+    setSelectedOptionIndex(0);
+  };
+
+  /**
+   * @param {number} index
+   * @returns {void}
+   */
+  const handleSelectAlternative = (index) => {
+    setSelectedOptionIndex(index);
+    setTranslatedText(translationOptions[index]);
   };
 
   /** @type {boolean} */
@@ -259,7 +304,7 @@ export default function Translator({ apiMode, config }) {
         </div>
 
         <div className="col-md-6">
-          <div className="card shadow-sm border-0 h-100 bg-white">
+          <div className="card shadow-sm border-0 h-100 bg-white d-flex flex-column">
             <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
               <select
                 className="form-select border-0 fw-bold text-primary w-50"
@@ -287,7 +332,7 @@ export default function Translator({ apiMode, config }) {
                 </button>
               )}
             </div>
-            <div className="card-body">
+            <div className="card-body flex-grow-1">
               <textarea
                 className="form-control border-0 fs-4 bg-white"
                 rows="10"
@@ -296,6 +341,24 @@ export default function Translator({ apiMode, config }) {
                 value={translatedText}
               />
             </div>
+
+            {/* Alternatives List (Only visible when LibreTranslate has alternatives) */}
+            {apiMode === 'libre' && translationOptions.length > 1 && (
+              <div className="card-footer bg-white border-top-0 pb-3">
+                <div className="d-flex flex-wrap gap-2 align-items-center">
+                  <span className="small text-muted fw-bold text-uppercase">Versions:</span>
+                  {translationOptions.map((_, index) => (
+                    <button
+                      key={index}
+                      className={`btn btn-sm ${selectedOptionIndex === index ? 'btn-primary' : 'btn-outline-primary'}`}
+                      onClick={() => handleSelectAlternative(index)}
+                    >
+                      {index === 0 ? 'Original' : index}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
