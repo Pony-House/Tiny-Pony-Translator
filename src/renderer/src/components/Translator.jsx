@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Prompts from '../components/ai/Prompts';
-import {
-  DEFAULT_LM_INSTRUCTION,
-  DEFAULT_LM_AUTO_INSTRUCTION,
-  LM_HARDCODED_LANGUAGES,
-} from '../utils/defaultValues';
+import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
 
 /**
  * @param {Object} options
@@ -201,7 +197,10 @@ export default function Translator({ apiMode, config }) {
 
     if (apiMode === 'libre' && libreLanguages.length > 0) {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => executeTranslation(value), 1000);
+      typingTimeoutRef.current = setTimeout(
+        () => executeTranslation(value),
+        config.typingDelay || 1000,
+      );
     }
   };
 
@@ -231,7 +230,7 @@ export default function Translator({ apiMode, config }) {
   /** @type {boolean} */
   const isLibreEmpty = apiMode === 'libre' && libreLanguages.length === 0;
   /** @type {Array} */
-  const currentLanguages = apiMode === 'libre' ? libreLanguages : LM_HARDCODED_LANGUAGES;
+  const currentLanguages = apiMode === 'libre' ? libreLanguages : config.lmLanguages;
   /** @type {Array} */
   const targetLanguagesList = currentLanguages.filter((l) => l.code !== 'auto');
 

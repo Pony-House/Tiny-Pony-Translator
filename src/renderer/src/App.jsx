@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Settings from './components/Settings';
 import Translator from './components/Translator';
+import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
 
 export default function App() {
   /**
@@ -12,7 +13,11 @@ export default function App() {
     const savedConfig = localStorage.getItem('appConfig');
     if (savedConfig) {
       try {
-        return JSON.parse(savedConfig);
+        /** @type {import('./components/Settings').SettingsParams} */
+        const parsed = JSON.parse(savedConfig);
+        if (!parsed.typingDelay) parsed.typingDelay = 1000;
+        if (!parsed.lmLanguages) parsed.lmLanguages = LM_HARDCODED_LANGUAGES;
+        return parsed;
       } catch {
         // Fallback to default if JSON is corrupted
       }
@@ -20,6 +25,8 @@ export default function App() {
     return {
       libre: { protocol: 'http', ip: '127.0.0.1:5000' },
       lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
+      typingDelay: 1000,
+      lmLanguages: LM_HARDCODED_LANGUAGES,
     };
   };
 

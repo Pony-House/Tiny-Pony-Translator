@@ -14,7 +14,17 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  */
 
 /**
- * @typedef {{ libre: LibreConfig; lmstudio: LmStudioConfig }} SettingsParams
+ * @typedef {Object} LanguageEntry
+ * @property {string} code
+ * @property {string} name
+ */
+
+/**
+ * @typedef {Object} SettingsParams
+ * @property {LibreConfig} libre
+ * @property {LmStudioConfig} lmstudio
+ * @property {number} typingDelay
+ * @property {LanguageEntry[]} lmLanguages
  */
 
 /**
@@ -65,11 +75,8 @@ export default function Settings({ config, setConfig }) {
         const parsedData = JSON.parse(event.target.result);
 
         // Handle server config
-        if (parsedData.servers && parsedData.servers.libre && parsedData.servers.lmstudio) {
+        if (parsedData.servers && parsedData.servers.libre) {
           setConfig(parsedData.servers);
-        } else if (parsedData.libre && parsedData.lmstudio) {
-          // Fallback for the older structure just in case
-          setConfig({ libre: parsedData.libre, lmstudio: parsedData.lmstudio });
         }
 
         // Handle prompts directly to localStorage
@@ -90,12 +97,41 @@ export default function Settings({ config, setConfig }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  /**
+   * @param {number} index
+   * @param {'code' | 'name'} field
+   * @param {string} value
+   * @returns {void}
+   */
+  const handleLanguageChange = (index, field, value) => {
+    const newLangs = [...config.lmLanguages];
+    newLangs[index][field] = value;
+    setConfig({ ...config, lmLanguages: newLangs });
+  };
+
+  /**
+   * @returns {void}
+   */
+  const addLanguage = () => {
+    setConfig({ ...config, lmLanguages: [...config.lmLanguages, { code: '', name: '' }] });
+  };
+
+  /**
+   * @param {number} index
+   * @returns {void}
+   */
+  const removeLanguage = (index) => {
+    const newLangs = config.lmLanguages.filter((_, i) => i !== index);
+    setConfig({ ...config, lmLanguages: newLangs });
+  };
+
   return (
-    <div className="row justify-content-center">
-      <div className="col-md-8">
-        <div className="card shadow-sm mb-4">
+    <div className="row g-4">
+      {/* Left Column: Network & Preferences */}
+      <div className="col-md-6">
+        <div className="card shadow-sm h-100">
           <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-            <span>Server Configuration</span>
+            <span>Global Settings</span>
             <div>
               <input
                 type="file"
@@ -120,14 +156,14 @@ export default function Settings({ config, setConfig }) {
             <div className="input-group mb-4">
               <select
                 className="form-select flex-grow-0"
-                style={{ width: '120px' }}
+                style={{ width: '100px' }}
                 value={config.libre.protocol}
                 onChange={(e) =>
                   setConfig({ ...config, libre: { ...config.libre, protocol: e.target.value } })
                 }
               >
-                <option value="http">HTTP://</option>
-                <option value="https">HTTPS://</option>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
               </select>
               <input
                 type="text"
@@ -141,10 +177,10 @@ export default function Settings({ config, setConfig }) {
             </div>
 
             <h5 className="mb-3">LM Studio API</h5>
-            <div className="input-group">
+            <div className="input-group mb-4">
               <select
                 className="form-select flex-grow-0"
-                style={{ width: '120px' }}
+                style={{ width: '100px' }}
                 value={config.lmstudio.protocol}
                 onChange={(e) =>
                   setConfig({
@@ -153,8 +189,8 @@ export default function Settings({ config, setConfig }) {
                   })
                 }
               >
-                <option value="http">HTTP://</option>
-                <option value="https">HTTPS://</option>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
               </select>
               <input
                 type="text"
@@ -166,6 +202,64 @@ export default function Settings({ config, setConfig }) {
                 }
               />
             </div>
+
+            <h5 className="mb-3 border-top pt-3">Preferences</h5>
+            <label className="form-label">Typing Delay (milliseconds)</label>
+            <input
+              type="number"
+              className="form-control w-50"
+              value={config.typingDelay}
+              onChange={(e) =>
+                setConfig({ ...config, typingDelay: parseInt(e.target.value) || 1000 })
+              }
+            />
+            <div className="form-text">Time to wait after you stop typing before translating.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column: LM Languages */}
+      <div className="col-md-6">
+        <div className="card shadow-sm h-100">
+          <div className="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <span>LM Studio Languages</span>
+            <button className="btn btn-sm btn-light fw-bold" onClick={addLanguage}>
+              + Add
+            </button>
+          </div>
+          <div className="card-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            {config.lmLanguages.map((lang, index) => (
+              <div key={index} className="row g-2 mb-2 align-items-center">
+                <div className="col-3">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Code (e.g. en)"
+                    value={lang.code}
+                    onChange={(e) => handleLanguageChange(index, 'code', e.target.value)}
+                    disabled={lang.code === 'auto'}
+                  />
+                </div>
+                <div className="col-7">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Name (e.g. English)"
+                    value={lang.name}
+                    onChange={(e) => handleLanguageChange(index, 'name', e.target.value)}
+                  />
+                </div>
+                <div className="col-2 text-end">
+                  <button
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={() => removeLanguage(index)}
+                    disabled={lang.code === 'auto'}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
