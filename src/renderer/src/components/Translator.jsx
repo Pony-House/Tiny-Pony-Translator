@@ -355,7 +355,7 @@ export default function Translator({ apiMode, config }) {
           <div className="card shadow-sm border-0 flex-grow-1">
             <div className="card-header bg-white border-0 pt-3">
               <select
-                className="form-select border-0 fw-bold text-primary w-75"
+                className="form-select border-0 fw-bold text-primary w-100"
                 disabled={isLibreEmpty}
                 value={sourceLang}
                 onChange={(e) => setSourceLang(e.target.value)}
@@ -425,7 +425,7 @@ export default function Translator({ apiMode, config }) {
           <div className="card shadow-sm border-0 flex-grow-1 bg-white">
             <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
               <select
-                className="form-select border-0 fw-bold text-primary w-50"
+                className="form-select border-0 fw-bold text-primary w-100"
                 disabled={isLibreEmpty}
                 value={targetLang}
                 onChange={(e) => setTargetLang(e.target.value)}
