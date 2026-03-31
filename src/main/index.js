@@ -15,6 +15,8 @@ const createWindow = () => {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
