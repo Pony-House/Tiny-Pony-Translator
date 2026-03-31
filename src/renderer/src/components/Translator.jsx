@@ -254,9 +254,11 @@ export default function Translator({ apiMode, config }) {
       if (!data.translatedFileUrl) throw new Error('No translation URL returned from API');
 
       /** @type {string} */
-      const downloadUrl = data.translatedFileUrl.startsWith('http://') || data.translatedFileUrl.startsWith('https://')
-        ? data.translatedFileUrl
-        : `${getBaseUrl('libre')}${data.translatedFileUrl}`;
+      const downloadUrl =
+        data.translatedFileUrl.startsWith('http://') ||
+        data.translatedFileUrl.startsWith('https://')
+          ? data.translatedFileUrl
+          : `${getBaseUrl('libre')}${data.translatedFileUrl}`;
 
       const fileRes = await fetch(downloadUrl);
       if (!fileRes.ok) throw new Error('Failed to fetch the translated blob data');
@@ -487,36 +489,37 @@ export default function Translator({ apiMode, config }) {
         </div>
       </div>
 
-      {fileQueue.length > 0 && (
-        <div
-          className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-white shadow-lg"
-          style={{ zIndex: 1050 }}
-        >
-          <h6 className="mb-3 text-light border-bottom border-secondary pb-2">
-            File Translation Queue
-          </h6>
-          <div
-            className="d-flex flex-column gap-2"
-            style={{ maxHeight: '150px', overflowY: 'auto' }}
-          >
-            {fileQueue.map((item) => (
-              <div
-                key={item.id}
-                className="d-flex justify-content-between align-items-center bg-secondary p-2 rounded"
+      <div
+        className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-white shadow-lg"
+        style={{
+          zIndex: 1050,
+          transform: fileQueue.length > 0 ? 'translateY(0)' : 'translateY(100%)',
+          opacity: fileQueue.length > 0 ? 1 : 0,
+          visibility: fileQueue.length > 0 ? 'visible' : 'hidden',
+          transition: 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)',
+        }}
+      >
+        <h6 className="mb-3 text-light border-bottom border-secondary pb-2">
+          File Translation Queue
+        </h6>
+        <div className="d-flex flex-column gap-2" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+          {fileQueue.map((item) => (
+            <div
+              key={item.id}
+              className="d-flex justify-content-between align-items-center bg-secondary p-2 rounded"
+            >
+              <span className="text-truncate fw-bold" style={{ maxWidth: '70%' }}>
+                {item.name}
+              </span>
+              <span
+                className={`badge ${item.status === 'Processing...' ? 'bg-warning text-dark' : item.status === 'Done' ? 'bg-success' : 'bg-danger'}`}
               >
-                <span className="text-truncate fw-bold" style={{ maxWidth: '70%' }}>
-                  {item.name}
-                </span>
-                <span
-                  className={`badge ${item.status === 'Processing...' ? 'bg-warning text-dark' : item.status === 'Done' ? 'bg-success' : 'bg-danger'}`}
-                >
-                  {item.status}
-                </span>
-              </div>
-            ))}
-          </div>
+                {item.status}
+              </span>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
     </>
   );
 }
