@@ -13,7 +13,7 @@ export default function Translator({ apiMode, config }) {
    */
   const getDefaultTargetLang = () => {
     /** @type {string | null} */
-    const saved = localStorage.getItem('targetLang');
+    const saved = localStorage.getItem(`${apiMode}_targetLang`);
     if (saved) return saved;
 
     if (navigator && navigator.language) {
@@ -23,23 +23,27 @@ export default function Translator({ apiMode, config }) {
   };
 
   // Translation State
-  const [sourceText, setSourceText] = useState(() => sessionStorage.getItem('sourceText') || '');
-  const [translatedText, setTranslatedText] = useState(
-    () => sessionStorage.getItem('translatedText') || '',
+  const [sourceText, setSourceText] = useState(
+    () => sessionStorage.getItem(`${apiMode}_sourceText`) || '',
   );
-  const [sourceLang, setSourceLang] = useState(() => localStorage.getItem('sourceLang') || 'auto');
+  const [translatedText, setTranslatedText] = useState(
+    () => sessionStorage.getItem(`${apiMode}_translatedText`) || '',
+  );
+  const [sourceLang, setSourceLang] = useState(
+    () => localStorage.getItem(`${apiMode}_sourceLang`) || 'auto',
+  );
   const [targetLang, setTargetLang] = useState(getDefaultTargetLang);
   const [libreLanguages, setLibreLanguages] = useState([]);
 
   // Alternatives State
   const [translationOptions, setTranslationOptions] = useState(() => {
     /** @type {string | null} */
-    const saved = sessionStorage.getItem('translationOptions');
+    const saved = sessionStorage.getItem(`${apiMode}_translationOptions`);
     return saved ? JSON.parse(saved) : [];
   });
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(() => {
     /** @type {string | null} */
-    const saved = sessionStorage.getItem('selectedOptionIndex');
+    const saved = sessionStorage.getItem(`${apiMode}_selectedOptionIndex`);
     return saved ? parseInt(saved, 10) : 0;
   });
 
@@ -56,22 +60,22 @@ export default function Translator({ apiMode, config }) {
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    sessionStorage.setItem('sourceText', sourceText);
-  }, [sourceText]);
+    sessionStorage.setItem(`${apiMode}_sourceText`, sourceText);
+  }, [sourceText, apiMode]);
 
   useEffect(() => {
-    sessionStorage.setItem('translatedText', translatedText);
-  }, [translatedText]);
+    sessionStorage.setItem(`${apiMode}_translatedText`, translatedText);
+  }, [translatedText, apiMode]);
 
   useEffect(() => {
-    sessionStorage.setItem('translationOptions', JSON.stringify(translationOptions));
-    sessionStorage.setItem('selectedOptionIndex', selectedOptionIndex.toString());
-  }, [translationOptions, selectedOptionIndex]);
+    sessionStorage.setItem(`${apiMode}_translationOptions`, JSON.stringify(translationOptions));
+    sessionStorage.setItem(`${apiMode}_selectedOptionIndex`, selectedOptionIndex.toString());
+  }, [translationOptions, selectedOptionIndex, apiMode]);
 
   useEffect(() => {
-    localStorage.setItem('sourceLang', sourceLang);
-    localStorage.setItem('targetLang', targetLang);
-  }, [sourceLang, targetLang]);
+    localStorage.setItem(`${apiMode}_sourceLang`, sourceLang);
+    localStorage.setItem(`${apiMode}_targetLang`, targetLang);
+  }, [sourceLang, targetLang, apiMode]);
 
   useEffect(() => {
     localStorage.setItem('lmInstruction', lmInstruction);

@@ -95,7 +95,8 @@ export default function App() {
       {view === 'settings' ? (
         <Settings setConfig={setConfig} config={config} />
       ) : (
-        <Translator apiMode={apiMode} config={config} />
+        /* Added key={apiMode} here to force full re-rendering of the component when switching API */
+        <Translator key={apiMode} apiMode={apiMode} config={config} />
       )}
     </div>
   );
