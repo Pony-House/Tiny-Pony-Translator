@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
 import Settings from './components/Settings';
 import Translator from './components/Translator';
 import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
