@@ -3,6 +3,13 @@ import Prompts from '../components/ai/Prompts';
 import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
 
 /**
+ * @typedef {Object} QueueItem
+ * @property {string} id
+ * @property {string} name
+ * @property {string} status
+ */
+
+/**
  * @param {Object} options
  * @param {string} options.apiMode
  * @param {import('./Settings').SettingsParams} options.config
@@ -21,6 +28,11 @@ export default function Translator({ apiMode, config }) {
     }
     return 'en';
   };
+
+  const [inputMode, setInputMode] = useState('text');
+
+  /** @type {[QueueItem[], import('react').Dispatch<import('react').SetStateAction<QueueItem[]>>]} */
+  const [fileQueue, setFileQueue] = useState([]);
 
   // Translation State
   const [sourceText, setSourceText] = useState(
@@ -209,6 +221,74 @@ export default function Translator({ apiMode, config }) {
   };
 
   /**
+   * @param {import('react').ChangeEvent<HTMLInputElement>} e
+   * @returns {Promise<void>}
+   */
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    /** @type {string} */
+    const id = Date.now().toString() + Math.random().toString(36).substring(7);
+    setFileQueue((prev) => [...prev, { id, name: file.name, status: 'Processing...' }]);
+
+    // Reset input
+    e.target.value = '';
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('source', sourceLang);
+      formData.append('target', targetLang);
+
+      const translateRes = await fetch(`${getBaseUrl('libre')}/translate_file`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!translateRes.ok) throw new Error('Failed to translate file');
+
+      /** @type {{translatedFileUrl: string}} */
+      const data = await translateRes.json();
+
+      if (!data.translatedFileUrl) throw new Error('No translation URL returned from API');
+
+      /** @type {string} */
+      const downloadUrl = data.translatedFileUrl.startsWith('http://') || data.translatedFileUrl.startsWith('https://')
+        ? data.translatedFileUrl
+        : `${getBaseUrl('libre')}${data.translatedFileUrl}`;
+
+      const fileRes = await fetch(downloadUrl);
+      if (!fileRes.ok) throw new Error('Failed to fetch the translated blob data');
+      const blob = await fileRes.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = blobUrl;
+      a.download = `translated_${targetLang}_${file.name}`;
+
+      document.body.appendChild(a);
+      a.click();
+
+      window.URL.revokeObjectURL(blobUrl);
+      a.remove();
+
+      setFileQueue((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: 'Done' } : item)),
+      );
+
+      setTimeout(() => {
+        setFileQueue((prev) => prev.filter((item) => item.id !== id));
+      }, 5000);
+    } catch (err) {
+      console.error(err);
+      setFileQueue((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: 'Error' } : item)),
+      );
+    }
+  };
+
+  /**
    * @returns {void}
    */
   const handleSwap = () => {
@@ -251,9 +331,28 @@ export default function Translator({ apiMode, config }) {
         />
       )}
 
-      <div className="row g-3 position-relative">
-        <div className="col-md-6">
-          <div className="card shadow-sm border-0 h-100">
+      {apiMode === 'libre' && (
+        <div className="mb-3 d-flex justify-content-center">
+          <div className="btn-group bg-white shadow-sm rounded">
+            <button
+              className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+              onClick={() => setInputMode('text')}
+            >
+              Translate Text
+            </button>
+            <button
+              className={`btn btn-sm px-4 fw-bold ${inputMode === 'file' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+              onClick={() => setInputMode('file')}
+            >
+              Translate File
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="row g-3 position-relative flex-grow-1" style={{ minHeight: '60vh' }}>
+        <div className="col-md-6 d-flex flex-column">
+          <div className="card shadow-sm border-0 flex-grow-1">
             <div className="card-header bg-white border-0 pt-3">
               <select
                 className="form-select border-0 fw-bold text-primary w-75"
@@ -272,42 +371,58 @@ export default function Translator({ apiMode, config }) {
                 )}
               </select>
             </div>
-            <div className="card-body">
-              <textarea
-                className="form-control border-0 fs-4"
-                rows="10"
-                style={{ resize: 'none', boxShadow: 'none' }}
-                placeholder="Type to translate..."
-                disabled={isLibreEmpty}
-                value={sourceText}
-                onChange={(e) => handleSourceChange(e.target.value)}
-              />
+            <div className="card-body d-flex flex-column">
+              {inputMode === 'text' ? (
+                <textarea
+                  className="form-control border-0 fs-4 flex-grow-1"
+                  style={{ resize: 'none', boxShadow: 'none' }}
+                  placeholder="Type to translate..."
+                  disabled={isLibreEmpty}
+                  value={sourceText}
+                  onChange={(e) => handleSourceChange(e.target.value)}
+                />
+              ) : (
+                <div className="d-flex flex-column align-items-center justify-content-center h-100 text-center">
+                  <h5 className="text-secondary mb-3">Upload a document to translate</h5>
+                  <input
+                    type="file"
+                    className="form-control w-75 mb-2"
+                    accept=".txt,.odt,.odp,.docx,.pptx,.epub,.html,.srt,.pdf"
+                    onChange={handleFileUpload}
+                    disabled={isLibreEmpty}
+                  />
+                  <small className="text-muted">
+                    Supports: .txt, .odt, .odp, .docx, .pptx, .epub, .html, .srt, .pdf
+                  </small>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Swap Button container positioned absolutely in the middle */}
-        <div
-          className="position-absolute top-50 start-50 translate-middle"
-          style={{ width: 'auto', zIndex: 10 }}
-        >
-          <button
-            className="btn btn-primary rounded-circle shadow d-flex align-items-center justify-content-center"
-            style={{ width: '45px', height: '45px' }}
-            onClick={handleSwap}
-            disabled={sourceLang === 'auto' || isLibreEmpty}
-            title={
-              sourceLang === 'auto'
-                ? "Cannot swap when 'Auto Detect' is selected"
-                : 'Swap languages'
-            }
+        {inputMode === 'text' && (
+          <div
+            className="position-absolute top-50 start-50 translate-middle"
+            style={{ width: 'auto', zIndex: 10 }}
           >
-            ⇄
-          </button>
-        </div>
+            <button
+              className="btn btn-primary rounded-circle shadow d-flex align-items-center justify-content-center"
+              style={{ width: '45px', height: '45px' }}
+              onClick={handleSwap}
+              disabled={sourceLang === 'auto' || isLibreEmpty}
+              title={
+                sourceLang === 'auto'
+                  ? "Cannot swap when 'Auto Detect' is selected"
+                  : 'Swap languages'
+              }
+            >
+              ⇄
+            </button>
+          </div>
+        )}
 
-        <div className="col-md-6">
-          <div className="card shadow-sm border-0 h-100 bg-white d-flex flex-column">
+        <div className="col-md-6 d-flex flex-column">
+          <div className="card shadow-sm border-0 flex-grow-1 bg-white">
             <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
               <select
                 className="form-select border-0 fw-bold text-primary w-50"
@@ -325,7 +440,7 @@ export default function Translator({ apiMode, config }) {
                   ))
                 )}
               </select>
-              {apiMode === 'lmstudio' && (
+              {apiMode === 'lmstudio' && inputMode === 'text' && (
                 <button
                   className="btn btn-primary fw-bold px-4"
                   disabled={isTranslating || isLibreEmpty}
@@ -335,18 +450,24 @@ export default function Translator({ apiMode, config }) {
                 </button>
               )}
             </div>
-            <div className="card-body flex-grow-1">
-              <textarea
-                className="form-control border-0 fs-4 bg-white"
-                rows="10"
-                style={{ resize: 'none', boxShadow: 'none' }}
-                readOnly
-                value={translatedText}
-              />
+            <div className="card-body d-flex flex-column">
+              {inputMode === 'text' ? (
+                <textarea
+                  className="form-control border-0 fs-4 bg-white flex-grow-1"
+                  style={{ resize: 'none', boxShadow: 'none' }}
+                  readOnly
+                  value={translatedText}
+                />
+              ) : (
+                <div className="d-flex align-items-center justify-content-center h-100">
+                  <span className="text-muted fs-5">
+                    Your translated file will automatically download here.
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Alternatives List (Only visible when LibreTranslate has alternatives) */}
-            {apiMode === 'libre' && translationOptions.length > 1 && (
+            {apiMode === 'libre' && inputMode === 'text' && translationOptions.length > 1 && (
               <div className="card-footer bg-white border-top-0 pb-3">
                 <div className="d-flex flex-wrap gap-2 align-items-center">
                   <span className="small text-muted fw-bold text-uppercase">Versions:</span>
@@ -365,6 +486,37 @@ export default function Translator({ apiMode, config }) {
           </div>
         </div>
       </div>
+
+      {fileQueue.length > 0 && (
+        <div
+          className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-white shadow-lg"
+          style={{ zIndex: 1050 }}
+        >
+          <h6 className="mb-3 text-light border-bottom border-secondary pb-2">
+            File Translation Queue
+          </h6>
+          <div
+            className="d-flex flex-column gap-2"
+            style={{ maxHeight: '150px', overflowY: 'auto' }}
+          >
+            {fileQueue.map((item) => (
+              <div
+                key={item.id}
+                className="d-flex justify-content-between align-items-center bg-secondary p-2 rounded"
+              >
+                <span className="text-truncate fw-bold" style={{ maxWidth: '70%' }}>
+                  {item.name}
+                </span>
+                <span
+                  className={`badge ${item.status === 'Processing...' ? 'bg-warning text-dark' : item.status === 'Done' ? 'bg-success' : 'bg-danger'}`}
+                >
+                  {item.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

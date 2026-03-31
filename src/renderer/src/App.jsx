@@ -42,9 +42,9 @@ export default function App() {
   }, [config]);
 
   return (
-    <div className="container-xxl py-4 bg-light min-vh-100">
+    <div className="w-100 vh-100 bg-light d-flex flex-column overflow-hidden">
       {/* Navigation Header */}
-      <nav className="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
+      <nav className="d-flex justify-content-between align-items-center p-3 border-bottom bg-white flex-shrink-0">
         <div className="d-flex align-items-center gap-4">
           <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
           <div className="btn-group shadow-sm">
@@ -92,12 +92,14 @@ export default function App() {
         )}
       </nav>
 
-      {view === 'settings' ? (
-        <Settings setConfig={setConfig} config={config} />
-      ) : (
-        /* Added key={apiMode} here to force full re-rendering of the component when switching API */
-        <Translator key={apiMode} apiMode={apiMode} config={config} />
-      )}
+      <main className="flex-grow-1 overflow-auto p-3 p-md-4">
+        {view === 'settings' ? (
+          <Settings setConfig={setConfig} config={config} />
+        ) : (
+          /* Added key={apiMode} here to force full re-rendering of the component when switching API */
+          <Translator key={apiMode} apiMode={apiMode} config={config} />
+        )}
+      </main>
     </div>
   );
 }
