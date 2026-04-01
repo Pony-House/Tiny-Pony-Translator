@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, Tray, Menu } from 'electron';
+import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
+import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
@@ -6,6 +7,26 @@ import icon from '../../resources/icon.png?asset';
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+
+ipcMain.handle('dialog:openJson', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'JSON Files', extensions: ['json'] }],
+  });
+  if (canceled || filePaths.length === 0) return null;
+  const content = await readFile(filePaths[0], 'utf-8');
+  return { filePath: filePaths[0], content };
+});
+
+ipcMain.handle('fs:saveJson', async (_, filePath, content) => {
+  try {
+    await writeFile(filePath, content, 'utf-8');
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+});
 
 /**
  * @returns {void}

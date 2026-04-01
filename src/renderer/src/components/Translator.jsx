@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Prompts from '../components/ai/Prompts';
+import JsonManager from './JsonManager';
 import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
 
 /**
@@ -29,7 +30,7 @@ export default function Translator({ apiMode, config }) {
     return 'en';
   };
 
-  const [inputMode, setInputMode] = useState('text');
+  const [inputMode, setInputMode] = useState('text'); // 'text', 'file', 'json'
 
   /** @type {[QueueItem[], import('react').Dispatch<import('react').SetStateAction<QueueItem[]>>]} */
   const [fileQueue, setFileQueue] = useState([]);
@@ -116,7 +117,7 @@ export default function Translator({ apiMode, config }) {
       const data = await res.json();
 
       /** @type {boolean} */
-      const hasAuto = data.some((/** @type {{code: string}} */ l) => l.code === 'auto');
+      const hasAuto = data.some((l) => l.code === 'auto');
       if (!hasAuto) data.unshift({ code: 'auto', name: 'Auto Detect' });
 
       setLibreLanguages(data);
@@ -128,6 +129,59 @@ export default function Translator({ apiMode, config }) {
   useEffect(() => {
     if (apiMode === 'libre') fetchLibreLanguages();
   }, [apiMode, config.libre]);
+
+  /**
+   * @returns {void}
+   */
+  const handleRefreshLanguages = () => {
+    if (apiMode === 'libre') fetchLibreLanguages();
+  };
+
+  /**
+   * @param {string} textToTranslate
+   * @returns {Promise<string|null>}
+   */
+  const executeSilentTranslation = async (textToTranslate) => {
+    if (!textToTranslate.trim()) return null;
+    try {
+      if (apiMode === 'libre') {
+        const res = await fetch(`${getBaseUrl('libre')}/translate`, {
+          method: 'POST',
+          body: JSON.stringify({
+            q: textToTranslate,
+            source: sourceLang,
+            target: targetLang,
+            format: 'text',
+          }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        return data.translatedText || null;
+      } else {
+        const systemPrompt =
+          sourceLang === 'auto'
+            ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`
+            : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`;
+        const res = await fetch(`${getBaseUrl('lmstudio')}/api/v1/chat`, {
+          method: 'POST',
+          body: JSON.stringify({
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: textToTranslate },
+            ],
+            temperature: 0.3,
+            max_tokens: 1000,
+          }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json();
+        return data.choices[0]?.message?.content || null;
+      }
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  };
 
   /**
    * @param {string} text
@@ -151,7 +205,7 @@ export default function Translator({ apiMode, config }) {
             source: sourceLang,
             target: targetLang,
             format: 'text',
-            alternatives: 3, // Requesting alternatives from LibreTranslate
+            alternatives: 3,
           }),
           headers: { 'Content-Type': 'application/json' },
         });
@@ -168,26 +222,8 @@ export default function Translator({ apiMode, config }) {
         setSelectedOptionIndex(0);
         setTranslatedText(mainTranslation);
       } else {
-        /** @type {string} */
-        const systemPrompt =
-          sourceLang === 'auto'
-            ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`
-            : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`;
-
-        const res = await fetch(`${getBaseUrl('lmstudio')}/api/v1/chat`, {
-          method: 'POST',
-          body: JSON.stringify({
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: text },
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
-          }),
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json();
-        setTranslatedText(data.choices[0]?.message?.content || '');
+        const result = await executeSilentTranslation(text);
+        setTranslatedText(result || '');
         setTranslationOptions([]);
       }
     } catch (err) {
@@ -333,164 +369,235 @@ export default function Translator({ apiMode, config }) {
         />
       )}
 
-      {apiMode === 'libre' && (
-        <div className="mb-3 d-flex justify-content-center">
-          <div className="btn-group bg-body shadow-sm rounded">
-            <button
-              className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
-              onClick={() => setInputMode('text')}
-            >
-              Translate Text
-            </button>
+      <div className="mb-3 d-flex justify-content-center">
+        <div className="btn-group bg-body shadow-sm rounded">
+          <button
+            className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+            onClick={() => setInputMode('text')}
+          >
+            Translate Text
+          </button>
+          {apiMode === 'libre' && (
             <button
               className={`btn btn-sm px-4 fw-bold ${inputMode === 'file' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
               onClick={() => setInputMode('file')}
             >
               Translate File
             </button>
-          </div>
-        </div>
-      )}
-
-      <div className="row g-3 position-relative flex-grow-1" style={{ minHeight: '60vh' }}>
-        <div className="col-md-6 d-flex flex-column">
-          <div className="card shadow-sm border-0 flex-grow-1">
-            <div className="card-header bg-body border-0 pt-3">
-              <select
-                className="form-select border-0 fw-bold text-primary w-100"
-                disabled={isLibreEmpty}
-                value={sourceLang}
-                onChange={(e) => setSourceLang(e.target.value)}
-              >
-                {isLibreEmpty ? (
-                  <option>Language list empty</option>
-                ) : (
-                  currentLanguages.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.name}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            <div className="card-body d-flex flex-column">
-              {inputMode === 'text' ? (
-                <textarea
-                  className="form-control border-0 fs-4 flex-grow-1"
-                  style={{ resize: 'none', boxShadow: 'none' }}
-                  placeholder="Type to translate..."
-                  disabled={isLibreEmpty}
-                  value={sourceText}
-                  onChange={(e) => handleSourceChange(e.target.value)}
-                />
-              ) : (
-                <div className="d-flex flex-column align-items-center justify-content-center h-100 text-center">
-                  <h5 className="text-secondary mb-3">Upload a document to translate</h5>
-                  <input
-                    type="file"
-                    className="form-control w-75 mb-2"
-                    accept=".txt,.odt,.odp,.docx,.pptx,.epub,.html,.srt,.pdf"
-                    onChange={handleFileUpload}
-                    disabled={isLibreEmpty}
-                  />
-                  <small className="text-muted">
-                    Supports: .txt, .odt, .odp, .docx, .pptx, .epub, .html, .srt, .pdf
-                  </small>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {inputMode === 'text' && (
-          <div
-            className="position-absolute top-50 start-50 translate-middle"
-            style={{ width: 'auto', zIndex: 10 }}
+          )}
+          <button
+            className={`btn btn-sm px-4 fw-bold ${inputMode === 'json' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+            onClick={() => setInputMode('json')}
           >
-            <button
-              className="btn btn-primary rounded-circle shadow d-flex align-items-center justify-content-center"
-              style={{ width: '45px', height: '45px' }}
-              onClick={handleSwap}
-              disabled={sourceLang === 'auto' || isLibreEmpty}
-              title={
-                sourceLang === 'auto'
-                  ? "Cannot swap when 'Auto Detect' is selected"
-                  : 'Swap languages'
-              }
-            >
-              ⇄
-            </button>
-          </div>
-        )}
-
-        <div className="col-md-6 d-flex flex-column">
-          <div className="card shadow-sm border-0 flex-grow-1 bg-body">
-            <div className="card-header bg-body border-0 pt-3 d-flex justify-content-between">
-              <select
-                className="form-select border-0 fw-bold text-primary w-100"
-                disabled={isLibreEmpty}
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value)}
-              >
-                {isLibreEmpty ? (
-                  <option>Empty</option>
-                ) : (
-                  targetLanguagesList.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              {apiMode === 'lmstudio' && inputMode === 'text' && (
-                <button
-                  className="btn btn-primary fw-bold px-4"
-                  disabled={isTranslating || isLibreEmpty}
-                  onClick={() => executeTranslation(sourceText)}
-                >
-                  {isTranslating ? '...' : 'Translate'}
-                </button>
-              )}
-            </div>
-            <div className="card-body d-flex flex-column">
-              {inputMode === 'text' ? (
-                <textarea
-                  className="form-control border-0 fs-4 bg-body flex-grow-1"
-                  style={{ resize: 'none', boxShadow: 'none' }}
-                  readOnly
-                  value={translatedText}
-                />
-              ) : (
-                <div className="d-flex align-items-center justify-content-center h-100">
-                  <span className="text-muted fs-5">
-                    Your translated file will automatically download here.
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {apiMode === 'libre' && inputMode === 'text' && translationOptions.length > 1 && (
-              <div className="card-footer bg-body border-top-0 pb-3">
-                <div className="d-flex flex-wrap gap-2 align-items-center">
-                  <span className="small text-muted fw-bold text-uppercase">Versions:</span>
-                  {translationOptions.map((_, index) => (
-                    <button
-                      key={index}
-                      className={`btn btn-sm ${selectedOptionIndex === index ? 'btn-primary' : 'btn-outline-primary'}`}
-                      onClick={() => handleSelectAlternative(index)}
-                    >
-                      {index === 0 ? 'Original' : index}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+            Translate JSON
+          </button>
         </div>
       </div>
 
+      <div className="row g-3 position-relative flex-grow-1" style={{ minHeight: '60vh' }}>
+        {/* If JSON mode, render full width column, otherwise 50% split */}
+        {inputMode === 'json' ? (
+          <div className="col-12 d-flex flex-column">
+            <div className="card shadow-sm border-0 flex-grow-1 bg-body">
+              <div className="card-header bg-body border-0 pt-3 d-flex align-items-center gap-3">
+                <select
+                  className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
+                  disabled={isLibreEmpty}
+                  value={sourceLang}
+                  onChange={(e) => setSourceLang(e.target.value)}
+                >
+                  {isLibreEmpty ? (
+                    <option>Language list empty</option>
+                  ) : (
+                    currentLanguages.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                <span className="text-muted fw-bold">⇄</span>
+
+                <select
+                  className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
+                  disabled={isLibreEmpty}
+                  value={targetLang}
+                  onChange={(e) => setTargetLang(e.target.value)}
+                >
+                  {isLibreEmpty ? (
+                    <option>Empty</option>
+                  ) : (
+                    targetLanguagesList.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                <button
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={handleRefreshLanguages}
+                  title="Refresh Languages"
+                >
+                  ↻
+                </button>
+              </div>
+              <div className="card-body d-flex flex-column p-0 border-top">
+                <JsonManager executeSilentTranslation={executeSilentTranslation} />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="col-md-6 d-flex flex-column">
+              <div className="card shadow-sm border-0 flex-grow-1 bg-body">
+                <div className="card-header bg-body border-0 pt-3 d-flex align-items-center justify-content-between">
+                  <select
+                    className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
+                    disabled={isLibreEmpty}
+                    value={sourceLang}
+                    onChange={(e) => setSourceLang(e.target.value)}
+                  >
+                    {isLibreEmpty ? (
+                      <option>Language list empty</option>
+                    ) : (
+                      currentLanguages.map((l) => (
+                        <option key={l.code} value={l.code}>
+                          {l.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    className="btn btn-sm btn-outline-secondary ms-2"
+                    onClick={handleRefreshLanguages}
+                    title="Refresh Languages"
+                  >
+                    ↻
+                  </button>
+                </div>
+                <div className="card-body d-flex flex-column">
+                  {inputMode === 'text' ? (
+                    <textarea
+                      className="form-control border-0 fs-4 flex-grow-1 bg-body text-body"
+                      style={{ resize: 'none', boxShadow: 'none' }}
+                      placeholder="Type to translate..."
+                      disabled={isLibreEmpty}
+                      value={sourceText}
+                      onChange={(e) => handleSourceChange(e.target.value)}
+                    />
+                  ) : (
+                    <div className="d-flex flex-column align-items-center justify-content-center h-100 text-center">
+                      <h5 className="text-secondary mb-3">Upload a document to translate</h5>
+                      <input
+                        type="file"
+                        className="form-control w-75 mb-2 bg-body text-body"
+                        accept=".txt,.odt,.odp,.docx,.pptx,.epub,.html,.srt,.pdf"
+                        onChange={handleFileUpload}
+                        disabled={isLibreEmpty}
+                      />
+                      <small className="text-muted">
+                        Supports: .txt, .odt, .odp, .docx, .pptx, .epub, .html, .srt, .pdf
+                      </small>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {inputMode === 'text' && (
+              <div
+                className="position-absolute top-50 start-50 translate-middle"
+                style={{ width: 'auto', zIndex: 10 }}
+              >
+                <button
+                  className="btn btn-primary rounded-circle shadow d-flex align-items-center justify-content-center"
+                  style={{ width: '45px', height: '45px' }}
+                  onClick={handleSwap}
+                  disabled={sourceLang === 'auto' || isLibreEmpty}
+                  title={
+                    sourceLang === 'auto'
+                      ? "Cannot swap when 'Auto Detect' is selected"
+                      : 'Swap languages'
+                  }
+                >
+                  ⇄
+                </button>
+              </div>
+            )}
+
+            <div className="col-md-6 d-flex flex-column">
+              <div className="card shadow-sm border-0 flex-grow-1 bg-body">
+                <div className="card-header bg-body border-0 pt-3 d-flex justify-content-between">
+                  <select
+                    className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
+                    disabled={isLibreEmpty}
+                    value={targetLang}
+                    onChange={(e) => setTargetLang(e.target.value)}
+                  >
+                    {isLibreEmpty ? (
+                      <option>Empty</option>
+                    ) : (
+                      targetLanguagesList.map((l) => (
+                        <option key={l.code} value={l.code}>
+                          {l.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {apiMode === 'lmstudio' && inputMode === 'text' && (
+                    <button
+                      className="btn btn-primary fw-bold px-4"
+                      disabled={isTranslating || isLibreEmpty}
+                      onClick={() => executeTranslation(sourceText)}
+                    >
+                      {isTranslating ? '...' : 'Translate'}
+                    </button>
+                  )}
+                </div>
+                <div className="card-body d-flex flex-column">
+                  {inputMode === 'text' ? (
+                    <textarea
+                      className="form-control border-0 fs-4 bg-body text-body flex-grow-1"
+                      style={{ resize: 'none', boxShadow: 'none' }}
+                      readOnly
+                      value={translatedText}
+                    />
+                  ) : (
+                    <div className="d-flex align-items-center justify-content-center h-100">
+                      <span className="text-muted fs-5">
+                        Your translated file will automatically download here.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {apiMode === 'libre' && inputMode === 'text' && translationOptions.length > 1 && (
+                  <div className="card-footer bg-body border-top-0 pb-3">
+                    <div className="d-flex flex-wrap gap-2 align-items-center">
+                      <span className="small text-muted fw-bold text-uppercase">Versions:</span>
+                      {translationOptions.map((_, index) => (
+                        <button
+                          key={index}
+                          className={`btn btn-sm ${selectedOptionIndex === index ? 'btn-primary' : 'btn-outline-primary'}`}
+                          onClick={() => handleSelectAlternative(index)}
+                        >
+                          {index === 0 ? 'Original' : index}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       <div
-        className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-body shadow-lg"
+        className="position-fixed bottom-0 start-0 w-100 p-3 bg-body-tertiary border-top shadow-lg"
         style={{
           zIndex: 1050,
           transform: fileQueue.length > 0 ? 'translateY(0)' : 'translateY(100%)',
@@ -499,16 +606,14 @@ export default function Translator({ apiMode, config }) {
           transition: 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)',
         }}
       >
-        <h6 className="mb-3 text-light border-bottom border-secondary pb-2">
-          File Translation Queue
-        </h6>
+        <h6 className="mb-3 text-body border-bottom pb-2">File Translation Queue</h6>
         <div className="d-flex flex-column gap-2" style={{ maxHeight: '150px', overflowY: 'auto' }}>
           {fileQueue.map((item) => (
             <div
               key={item.id}
-              className="d-flex justify-content-between align-items-center bg-secondary p-2 rounded"
+              className="d-flex justify-content-between align-items-center bg-body border p-2 rounded"
             >
-              <span className="text-truncate fw-bold" style={{ maxWidth: '70%' }}>
+              <span className="text-truncate fw-bold text-body" style={{ maxWidth: '70%' }}>
                 {item.name}
               </span>
               <span
