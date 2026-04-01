@@ -17,6 +17,9 @@ export default function App() {
         if (!parsed.typingDelay) parsed.typingDelay = 1000;
         if (!parsed.lmLanguages) parsed.lmLanguages = LM_HARDCODED_LANGUAGES;
         if (!parsed.theme) parsed.theme = 'auto';
+        if (!parsed.libre) parsed.libre = { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' };
+        if (!parsed.openaic)
+          parsed.openaic = { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' };
         if (!parsed.libre.apiKey) parsed.libre.apiKey = '';
         if (!parsed.openaic.apiKey) parsed.openaic.apiKey = '';
         return parsed;
@@ -76,7 +79,10 @@ export default function App() {
   return (
     <div className="w-100 vh-100 bg-body-tertiary d-flex flex-column overflow-hidden transition-theme">
       {/* Navigation Header */}
-      <nav className="d-flex justify-content-between align-items-center p-3 border-bottom bg-body flex-shrink-0">
+      <nav
+        className="d-flex justify-content-between align-items-center p-3 border-bottom bg-body flex-shrink-0 shadow-sm"
+        style={{ zIndex: 10 }}
+      >
         <div className="d-flex align-items-center gap-4">
           <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
           <div className="btn-group shadow-sm">
@@ -124,7 +130,7 @@ export default function App() {
         )}
       </nav>
 
-      <main className="flex-grow-1 overflow-auto p-3 p-md-4">
+      <main className="flex-grow-1 d-flex flex-column overflow-hidden p-3 p-md-4">
         {view === 'settings' ? (
           <Settings setConfig={setConfig} config={config} />
         ) : (
