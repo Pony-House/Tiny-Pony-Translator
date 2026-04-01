@@ -19,7 +19,7 @@ export default function Prompts({
 }) {
   return (
     <div className="card mb-4 shadow-sm border-0">
-      <div className="card-body bg-white rounded">
+      <div className="card-body bg-body rounded">
         <div className="row g-3">
           <div className="col-md-4">
             <label className="form-label fw-bold small text-uppercase">System Prompt</label>

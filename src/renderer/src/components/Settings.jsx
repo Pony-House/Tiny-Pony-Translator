@@ -25,6 +25,7 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  * @property {LmStudioConfig} lmstudio
  * @property {number} typingDelay
  * @property {LanguageEntry[]} lmLanguages
+ * @property {string} theme
  */
 
 /**
@@ -127,11 +128,10 @@ export default function Settings({ config, setConfig }) {
 
   return (
     <div className="row g-4">
-      {/* Left Column: Network & Preferences */}
       <div className="col-md-6">
-        <div className="card shadow-sm h-100">
-          <div className="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-            <span>Global Settings</span>
+        <div className="card shadow-sm h-100 border-0">
+          <div className="card-header bg-body-secondary text-body d-flex justify-content-between align-items-center">
+            <span className="fw-bold">Global Settings</span>
             <div>
               <input
                 type="file"
@@ -141,17 +141,17 @@ export default function Settings({ config, setConfig }) {
                 onChange={handleImport}
               />
               <button
-                className="btn btn-sm btn-outline-light me-2"
+                className="btn btn-sm btn-outline-secondary me-2"
                 onClick={() => fileInputRef.current?.click()}
               >
                 Import
               </button>
-              <button className="btn btn-sm btn-light" onClick={handleExport}>
+              <button className="btn btn-sm btn-secondary" onClick={handleExport}>
                 Export
               </button>
             </div>
           </div>
-          <div className="card-body">
+          <div className="card-body bg-body">
             <h5 className="mb-3">LibreTranslate API</h5>
             <div className="input-group mb-4">
               <select
@@ -203,38 +203,51 @@ export default function Settings({ config, setConfig }) {
               />
             </div>
 
-            <h5 className="mb-3 border-top pt-3">Preferences</h5>
-            <label className="form-label">Typing Delay (milliseconds)</label>
-            <input
-              type="number"
-              className="form-control w-50"
-              value={config.typingDelay}
-              onChange={(e) =>
-                setConfig({ ...config, typingDelay: parseInt(e.target.value) || 1000 })
-              }
-            />
-            <div className="form-text">Time to wait after you stop typing before translating.</div>
+            <h5 className="mb-3 border-top pt-3">Preferences & Appearance</h5>
+            <div className="mb-3">
+              <label className="form-label">Theme</label>
+              <select
+                className="form-select w-50"
+                value={config.theme}
+                onChange={(e) => setConfig({ ...config, theme: e.target.value })}
+              >
+                <option value="auto">System Auto</option>
+                <option value="light">Light Mode</option>
+                <option value="dark">Dark Mode</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="form-label">Typing Delay (milliseconds)</label>
+              <input
+                type="number"
+                className="form-control w-50"
+                value={config.typingDelay}
+                onChange={(e) =>
+                  setConfig({ ...config, typingDelay: parseInt(e.target.value) || 1000 })
+                }
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right Column: LM Languages */}
       <div className="col-md-6">
-        <div className="card shadow-sm h-100">
-          <div className="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
-            <span>LM Studio Languages</span>
-            <button className="btn btn-sm btn-light fw-bold" onClick={addLanguage}>
+        <div className="card shadow-sm h-100 border-0">
+          <div className="card-header bg-body-secondary text-body d-flex justify-content-between align-items-center">
+            <span className="fw-bold">LM Studio Languages</span>
+            <button className="btn btn-sm btn-secondary fw-bold" onClick={addLanguage}>
               + Add
             </button>
           </div>
-          <div className="card-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div className="card-body bg-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
             {config.lmLanguages.map((lang, index) => (
               <div key={index} className="row g-2 mb-2 align-items-center">
                 <div className="col-3">
                   <input
                     type="text"
                     className="form-control form-control-sm"
-                    placeholder="Code (e.g. en)"
+                    placeholder="Code"
                     value={lang.code}
                     onChange={(e) => handleLanguageChange(index, 'code', e.target.value)}
                     disabled={lang.code === 'auto'}
@@ -244,7 +257,7 @@ export default function Settings({ config, setConfig }) {
                   <input
                     type="text"
                     className="form-control form-control-sm"
-                    placeholder="Name (e.g. English)"
+                    placeholder="Name"
                     value={lang.name}
                     onChange={(e) => handleLanguageChange(index, 'name', e.target.value)}
                   />

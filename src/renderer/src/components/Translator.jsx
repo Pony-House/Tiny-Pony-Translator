@@ -335,7 +335,7 @@ export default function Translator({ apiMode, config }) {
 
       {apiMode === 'libre' && (
         <div className="mb-3 d-flex justify-content-center">
-          <div className="btn-group bg-white shadow-sm rounded">
+          <div className="btn-group bg-body shadow-sm rounded">
             <button
               className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
               onClick={() => setInputMode('text')}
@@ -355,7 +355,7 @@ export default function Translator({ apiMode, config }) {
       <div className="row g-3 position-relative flex-grow-1" style={{ minHeight: '60vh' }}>
         <div className="col-md-6 d-flex flex-column">
           <div className="card shadow-sm border-0 flex-grow-1">
-            <div className="card-header bg-white border-0 pt-3">
+            <div className="card-header bg-body border-0 pt-3">
               <select
                 className="form-select border-0 fw-bold text-primary w-100"
                 disabled={isLibreEmpty}
@@ -424,8 +424,8 @@ export default function Translator({ apiMode, config }) {
         )}
 
         <div className="col-md-6 d-flex flex-column">
-          <div className="card shadow-sm border-0 flex-grow-1 bg-white">
-            <div className="card-header bg-white border-0 pt-3 d-flex justify-content-between">
+          <div className="card shadow-sm border-0 flex-grow-1 bg-body">
+            <div className="card-header bg-body border-0 pt-3 d-flex justify-content-between">
               <select
                 className="form-select border-0 fw-bold text-primary w-100"
                 disabled={isLibreEmpty}
@@ -455,7 +455,7 @@ export default function Translator({ apiMode, config }) {
             <div className="card-body d-flex flex-column">
               {inputMode === 'text' ? (
                 <textarea
-                  className="form-control border-0 fs-4 bg-white flex-grow-1"
+                  className="form-control border-0 fs-4 bg-body flex-grow-1"
                   style={{ resize: 'none', boxShadow: 'none' }}
                   readOnly
                   value={translatedText}
@@ -470,7 +470,7 @@ export default function Translator({ apiMode, config }) {
             </div>
 
             {apiMode === 'libre' && inputMode === 'text' && translationOptions.length > 1 && (
-              <div className="card-footer bg-white border-top-0 pb-3">
+              <div className="card-footer bg-body border-top-0 pb-3">
                 <div className="d-flex flex-wrap gap-2 align-items-center">
                   <span className="small text-muted fw-bold text-uppercase">Versions:</span>
                   {translationOptions.map((_, index) => (
@@ -490,7 +490,7 @@ export default function Translator({ apiMode, config }) {
       </div>
 
       <div
-        className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-white shadow-lg"
+        className="position-fixed bottom-0 start-0 w-100 p-3 bg-dark text-body shadow-lg"
         style={{
           zIndex: 1050,
           transform: fileQueue.length > 0 ? 'translateY(0)' : 'translateY(100%)',

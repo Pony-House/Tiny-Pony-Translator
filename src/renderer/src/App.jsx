@@ -16,6 +16,7 @@ export default function App() {
         const parsed = JSON.parse(savedConfig);
         if (!parsed.typingDelay) parsed.typingDelay = 1000;
         if (!parsed.lmLanguages) parsed.lmLanguages = LM_HARDCODED_LANGUAGES;
+        if (!parsed.theme) parsed.theme = 'auto';
         return parsed;
       } catch {
         // Fallback to default if JSON is corrupted
@@ -26,6 +27,7 @@ export default function App() {
       lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
       typingDelay: 1000,
       lmLanguages: LM_HARDCODED_LANGUAGES,
+      theme: 'auto',
     };
   };
 
@@ -40,10 +42,39 @@ export default function App() {
     localStorage.setItem('appConfig', JSON.stringify(config));
   }, [config]);
 
+  // Theme Controller
+  useEffect(() => {
+    /** @type {MediaQueryList} */
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    /**
+     * @returns {void}
+     */
+    const applyTheme = () => {
+      /** @type {string} */
+      const resolvedTheme =
+        config.theme === 'auto' ? (mediaQuery.matches ? 'dark' : 'light') : config.theme;
+
+      document.documentElement.setAttribute('data-bs-theme', resolvedTheme);
+    };
+
+    applyTheme();
+
+    /**
+     * @returns {void}
+     */
+    const handleChange = () => {
+      if (config.theme === 'auto') applyTheme();
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [config.theme]);
+
   return (
-    <div className="w-100 vh-100 bg-light d-flex flex-column overflow-hidden">
+    <div className="w-100 vh-100 bg-body-tertiary d-flex flex-column overflow-hidden transition-theme">
       {/* Navigation Header */}
-      <nav className="d-flex justify-content-between align-items-center p-3 border-bottom bg-white flex-shrink-0">
+      <nav className="d-flex justify-content-between align-items-center p-3 border-bottom bg-body flex-shrink-0">
         <div className="d-flex align-items-center gap-4">
           <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
           <div className="btn-group shadow-sm">
