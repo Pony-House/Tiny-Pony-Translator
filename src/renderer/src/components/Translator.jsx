@@ -60,7 +60,7 @@ export default function Translator({ apiMode, config }) {
     return saved ? parseInt(saved, 10) : 0;
   });
 
-  // LM Studio Specifics
+  // OpenAi Compatible Specifics
   const [lmInstruction, setLmInstruction] = useState(
     () => localStorage.getItem('lmInstruction') || DEFAULT_LM_INSTRUCTION,
   );
@@ -170,7 +170,7 @@ export default function Translator({ apiMode, config }) {
           sourceLang === 'auto'
             ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`
             : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`;
-        const res = await fetch(`${getBaseUrl('lmstudio')}/api/v1/chat`, {
+        const res = await fetch(`${getBaseUrl('openaic')}/v1/chat/completions`, {
           method: 'POST',
           body: JSON.stringify({
             messages: [
@@ -347,7 +347,7 @@ export default function Translator({ apiMode, config }) {
 
   return (
     <>
-      {apiMode === 'lmstudio' && (
+      {apiMode === 'openaic' && (
         <Prompts
           lmHeader={lmHeader}
           setLmHeader={setLmHeader}
@@ -536,7 +536,7 @@ export default function Translator({ apiMode, config }) {
                       ))
                     )}
                   </select>
-                  {apiMode === 'lmstudio' && inputMode === 'text' && (
+                  {apiMode === 'openaic' && inputMode === 'text' && (
                     <button
                       className="btn btn-primary fw-bold px-4"
                       disabled={isTranslating || isLibreEmpty}

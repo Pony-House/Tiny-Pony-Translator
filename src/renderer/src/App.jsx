@@ -24,7 +24,7 @@ export default function App() {
     }
     return {
       libre: { protocol: 'http', ip: '127.0.0.1:5000' },
-      lmstudio: { protocol: 'http', ip: '127.0.0.1:1234' },
+      openaic: { protocol: 'http', ip: '127.0.0.1:1234' },
       typingDelay: 1000,
       lmLanguages: LM_HARDCODED_LANGUAGES,
       theme: 'auto',
@@ -112,11 +112,11 @@ export default function App() {
               className="btn-check"
               name="apiMode"
               id="lmMode"
-              checked={apiMode === 'lmstudio'}
-              onChange={() => setApiMode('lmstudio')}
+              checked={apiMode === 'openaic'}
+              onChange={() => setApiMode('openaic')}
             />
             <label className="btn btn-sm btn-outline-secondary" htmlFor="lmMode">
-              LM Studio
+              OpenAi Compatible
             </label>
           </div>
         )}

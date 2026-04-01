@@ -8,7 +8,7 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  */
 
 /**
- * @typedef {Object} LmStudioConfig
+ * @typedef {Object} OpenAicConfig
  * @property {string} protocol
  * @property {string} ip
  */
@@ -22,7 +22,7 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
 /**
  * @typedef {Object} SettingsParams
  * @property {LibreConfig} libre
- * @property {LmStudioConfig} lmstudio
+ * @property {OpenAicConfig} openaic
  * @property {number} typingDelay
  * @property {LanguageEntry[]} lmLanguages
  * @property {string} theme
@@ -176,16 +176,16 @@ export default function Settings({ config, setConfig }) {
               />
             </div>
 
-            <h5 className="mb-3">LM Studio API</h5>
+            <h5 className="mb-3">OpenAi Compatible API</h5>
             <div className="input-group mb-4">
               <select
                 className="form-select flex-grow-0"
                 style={{ width: '100px' }}
-                value={config.lmstudio.protocol}
+                value={config.openaic.protocol}
                 onChange={(e) =>
                   setConfig({
                     ...config,
-                    lmstudio: { ...config.lmstudio, protocol: e.target.value },
+                    openaic: { ...config.openaic, protocol: e.target.value },
                   })
                 }
               >
@@ -196,9 +196,9 @@ export default function Settings({ config, setConfig }) {
                 type="text"
                 className="form-control"
                 placeholder="127.0.0.1:1234"
-                value={config.lmstudio.ip}
+                value={config.openaic.ip}
                 onChange={(e) =>
-                  setConfig({ ...config, lmstudio: { ...config.lmstudio, ip: e.target.value } })
+                  setConfig({ ...config, openaic: { ...config.openaic, ip: e.target.value } })
                 }
               />
             </div>
@@ -235,7 +235,7 @@ export default function Settings({ config, setConfig }) {
       <div className="col-md-6">
         <div className="card shadow-sm h-100 border-0">
           <div className="card-header bg-body-secondary text-body d-flex justify-content-between align-items-center">
-            <span className="fw-bold">LM Studio Languages</span>
+            <span className="fw-bold">OpenAi Compatible Languages</span>
             <button className="btn btn-sm btn-secondary fw-bold" onClick={addLanguage}>
               + Add
             </button>
