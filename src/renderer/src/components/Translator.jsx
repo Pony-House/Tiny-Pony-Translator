@@ -139,7 +139,7 @@ export default function Translator({ apiMode, config }) {
 
   /**
    * @param {string} textToTranslate
-   * @returns {Promise<string|null>}
+   * @returns {Promise<{text: string, alts: string[]}|null>}
    */
   const executeSilentTranslation = async (textToTranslate) => {
     if (!textToTranslate.trim()) return null;
@@ -152,11 +152,17 @@ export default function Translator({ apiMode, config }) {
             source: sourceLang,
             target: targetLang,
             format: 'text',
+            alternatives: 3,
           }),
           headers: { 'Content-Type': 'application/json' },
         });
         const data = await res.json();
-        return data.translatedText || null;
+        const mainText = data.translatedText || '';
+        const alts = data.alternatives || [];
+        return {
+          text: mainText,
+          alts: mainText ? [mainText, ...alts] : [],
+        };
       } else {
         const systemPrompt =
           sourceLang === 'auto'
@@ -175,7 +181,10 @@ export default function Translator({ apiMode, config }) {
           headers: { 'Content-Type': 'application/json' },
         });
         const data = await res.json();
-        return data.choices[0]?.message?.content || null;
+        return {
+          text: data.choices[0]?.message?.content || '',
+          alts: [],
+        };
       }
     } catch (err) {
       console.error(err);
@@ -197,35 +206,10 @@ export default function Translator({ apiMode, config }) {
     setIsTranslating(true);
 
     try {
-      if (apiMode === 'libre') {
-        const res = await fetch(`${getBaseUrl('libre')}/translate`, {
-          method: 'POST',
-          body: JSON.stringify({
-            q: text,
-            source: sourceLang,
-            target: targetLang,
-            format: 'text',
-            alternatives: 3,
-          }),
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await res.json();
-
-        /** @type {string} */
-        const mainTranslation = data.translatedText || '';
-        /** @type {string[]} */
-        const alts = data.alternatives || [];
-        /** @type {string[]} */
-        const options = mainTranslation ? [mainTranslation, ...alts] : [];
-
-        setTranslationOptions(options);
-        setSelectedOptionIndex(0);
-        setTranslatedText(mainTranslation);
-      } else {
-        const result = await executeSilentTranslation(text);
-        setTranslatedText(result || '');
-        setTranslationOptions([]);
-      }
+      const result = await executeSilentTranslation(text);
+      setTranslatedText(result?.text || '');
+      setTranslationOptions(result?.alts || []);
+      setSelectedOptionIndex(0);
     } catch (err) {
       console.error('Translation error:', err);
       setTranslatedText('Error: Connection failed. Check your server settings.');

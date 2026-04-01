@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 /**
  * @param {Object} obj
@@ -53,8 +53,6 @@ const unflattenJson = (flatArray) => {
   return result;
 };
 
-const ROW_HEIGHT = 110;
-
 /**
  * @param {Object} options
  * @param {Function} options.executeSilentTranslation
@@ -68,14 +66,17 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [originalFlat, setOriginalFlat] = useState([]);
 
   const [scrollTop, setScrollTop] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(500);
+  const [viewportHeight, setViewportHeight] = useState(600);
   const containerRef = useRef(null);
 
   const [isBulkTranslating, setIsBulkTranslating] = useState(false);
   const [translatingIndex, setTranslatingIndex] = useState(-1);
 
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [activeRowIndex, setActiveRowIndex] = useState(-1);
+
   /**
-   * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean}>}
+   * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean, alts: string[]}>}
    */
   const currentFlatData = history[historyIndex] || [];
   const isDirty = historyIndex > 0;
@@ -105,11 +106,13 @@ export default function JsonManager({ executeSilentTranslation }) {
             original: item.value,
             isEdited: false,
             selected: false,
+            alts: [],
           }));
           setFilePath(result.filePath);
           setOriginalFlat(flat);
           setHistory([flat]);
           setHistoryIndex(0);
+          setExpandedGroups(new Set());
         } catch {
           alert('Invalid JSON file.');
         }
@@ -184,6 +187,7 @@ export default function JsonManager({ executeSilentTranslation }) {
       ...newData[index],
       value: newData[index].original,
       isEdited: false,
+      alts: [],
     };
     pushHistory(newData);
   };
@@ -211,15 +215,47 @@ export default function JsonManager({ executeSilentTranslation }) {
   }, [undo, redo]);
 
   /**
+   * @param {string} groupPath
+   * @returns {void}
+   */
+  const toggleGroup = (groupPath) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupPath)) next.delete(groupPath);
+      else next.add(groupPath);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    const allGroups = new Set();
+    currentFlatData.forEach((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const parent = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
+      allGroups.add(parent);
+    });
+    setExpandedGroups(allGroups);
+  };
+
+  const collapseAll = () => setExpandedGroups(new Set());
+
+  /**
    * @param {number} index
    * @returns {Promise<void>}
    */
   const handleTranslateSingle = async (index) => {
     setTranslatingIndex(index);
     try {
-      const translated = await executeSilentTranslation(currentFlatData[index].value);
-      if (translated) {
-        handleValueChange(index, translated);
+      const result = await executeSilentTranslation(currentFlatData[index].value);
+      if (result && result.text) {
+        const newData = [...currentFlatData];
+        newData[index] = {
+          ...newData[index],
+          value: result.text,
+          isEdited: result.text !== newData[index].original,
+          alts: result.alts || [],
+        };
+        pushHistory(newData);
       }
     } catch (e) {
       console.error(e);
@@ -238,13 +274,14 @@ export default function JsonManager({ executeSilentTranslation }) {
 
     for (const index of selectedIndexes) {
       try {
-        const translated = await executeSilentTranslation(newData[index].value);
-        if (translated) {
+        const result = await executeSilentTranslation(newData[index].value);
+        if (result && result.text) {
           newData[index] = {
             ...newData[index],
-            value: translated,
-            isEdited: translated !== newData[index].original,
+            value: result.text,
+            isEdited: result.text !== newData[index].original,
             selected: false,
+            alts: result.alts || [],
           };
         }
       } catch {
@@ -255,16 +292,81 @@ export default function JsonManager({ executeSilentTranslation }) {
     setIsBulkTranslating(false);
   };
 
-  // Virtualization calculations
-  const totalHeight = currentFlatData.length * ROW_HEIGHT;
-  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 2);
-  const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + 4;
-  const visibleItems = currentFlatData
-    .slice(startIndex, startIndex + visibleCount)
-    .map((item, idx) => ({
-      ...item,
-      realIndex: startIndex + idx,
-    }));
+  // Pre-calculate visual layout and heights based on expanded states
+  const { visibleRows, totalHeight } = useMemo(() => {
+    const rows = [];
+    let currentGroup = null;
+    let currentTop = 0;
+    let groupItemCount = 0;
+
+    currentFlatData.forEach((item, originalIndex) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const parentPath = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
+      const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
+
+      if (parentPath !== currentGroup) {
+        currentGroup = parentPath;
+        groupItemCount = currentFlatData.filter((i) => {
+          const lDot = i.path.lastIndexOf('.');
+          const pPath = lDot > 0 ? i.path.substring(0, lDot) : 'Root';
+          return pPath === parentPath;
+        }).length;
+
+        rows.push({
+          isHeader: true,
+          id: `header-${parentPath}`,
+          groupPath: parentPath,
+          itemCount: groupItemCount,
+          top: currentTop,
+          height: 50,
+        });
+        currentTop += 50;
+      }
+
+      if (expandedGroups.has(parentPath)) {
+        const hasAlts = item.alts && item.alts.length > 1;
+        const baseHeight = 110;
+        const itemHeight = hasAlts ? baseHeight + 45 : baseHeight;
+
+        rows.push({
+          ...item,
+          isHeader: false,
+          id: `item-${item.path}`,
+          originalIndex,
+          keyName,
+          top: currentTop,
+          height: itemHeight,
+        });
+        currentTop += itemHeight;
+      }
+    });
+
+    return { visibleRows: rows, totalHeight: currentTop };
+  }, [currentFlatData, expandedGroups]);
+
+  // Derive visible items based on scroll
+  let startIndex = 0;
+  for (let i = 0; i < visibleRows.length; i++) {
+    if (visibleRows[i].top + visibleRows[i].height >= scrollTop) {
+      startIndex = Math.max(0, i - 2);
+      break;
+    }
+  }
+
+  const visibleCount = Math.ceil(viewportHeight / 50) + 5;
+  const visibleItems = visibleRows.slice(startIndex, startIndex + visibleCount);
+
+  useEffect(() => {
+    if (containerRef.current) {
+      setViewportHeight(containerRef.current.clientHeight);
+    }
+
+    const handleResize = () => {
+      if (containerRef.current) setViewportHeight(containerRef.current.clientHeight);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (!filePath) {
     return (
@@ -280,12 +382,16 @@ export default function JsonManager({ executeSilentTranslation }) {
   return (
     <div className="d-flex flex-column h-100 bg-body p-3">
       {/* Toolbar */}
-      <div className="d-flex justify-content-between align-items-center mb-3 bg-body-tertiary p-2 rounded border">
-        <div className="d-flex gap-2">
-          <button className="btn btn-sm btn-outline-secondary" onClick={handleOpen}>
+      <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-body-tertiary p-2 rounded border gap-2">
+        <div className="d-flex flex-wrap gap-2 align-items-center">
+          <button className="btn btn-sm btn-outline-secondary fw-bold" onClick={handleOpen}>
             Open File
           </button>
-          <button className="btn btn-sm btn-success" onClick={handleSave} disabled={!isDirty}>
+          <button
+            className="btn btn-sm btn-success fw-bold"
+            onClick={handleSave}
+            disabled={!isDirty}
+          >
             Save Changes
           </button>
           <div className="vr mx-1"></div>
@@ -303,8 +409,15 @@ export default function JsonManager({ executeSilentTranslation }) {
           >
             Redo
           </button>
+          <div className="vr mx-1"></div>
+          <button className="btn btn-sm btn-outline-primary" onClick={expandAll}>
+            Expand All
+          </button>
+          <button className="btn btn-sm btn-outline-secondary" onClick={collapseAll}>
+            Collapse All
+          </button>
         </div>
-        <div className="d-flex gap-2 align-items-center">
+        <div className="d-flex flex-wrap gap-2 align-items-center">
           <span className="small text-muted me-2">Items: {currentFlatData.length}</span>
           <button className="btn btn-sm btn-outline-primary" onClick={selectAll}>
             Select All
@@ -327,78 +440,128 @@ export default function JsonManager({ executeSilentTranslation }) {
         ref={containerRef}
         className="flex-grow-1 overflow-auto border rounded bg-body position-relative"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        style={{ height: '0px' }} // Flex-grow handles the real height
+        style={{ height: '0px' }}
       >
         <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
-          {visibleItems.map((item) => (
-            <div
-              key={item.realIndex}
-              className={`position-absolute w-100 px-3 border-bottom d-flex align-items-center ${item.isEdited ? 'bg-warning-subtle' : 'bg-body'}`}
-              style={{ top: `${item.realIndex * ROW_HEIGHT}px`, height: `${ROW_HEIGHT}px` }}
-            >
-              <div className="form-check me-3">
-                <input
-                  className="form-check-input"
-                  type="checkbox"
-                  checked={item.selected}
-                  onChange={() => toggleSelection(item.realIndex)}
-                  disabled={!item.isString}
-                />
-              </div>
+          {visibleItems.map((item) => {
+            if (item.isHeader) {
+              const isExpanded = expandedGroups.has(item.groupPath);
+              return (
+                <div
+                  key={item.id}
+                  className="position-absolute w-100 px-3 bg-body-secondary border-bottom d-flex align-items-center justify-content-between cursor-pointer"
+                  style={{
+                    top: `${item.top}px`,
+                    height: `${item.height}px`,
+                    zIndex: 2,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => toggleGroup(item.groupPath)}
+                >
+                  <span className="fw-bold text-primary">
+                    <span className="me-2">{isExpanded ? '▼' : '▶'}</span>[{item.groupPath}]
+                  </span>
+                  <span className="badge bg-secondary">{item.itemCount} items</span>
+                </div>
+              );
+            }
+
+            const isFocused = activeRowIndex === item.originalIndex;
+
+            return (
               <div
-                className="flex-grow-1 d-flex flex-column justify-content-center"
-                style={{ minWidth: 0 }}
+                key={item.id}
+                className={`position-absolute w-100 px-3 border-bottom d-flex flex-column justify-content-center ${item.isEdited ? 'bg-warning-subtle' : 'bg-body'}`}
+                style={{
+                  top: `${item.top}px`,
+                  height: `${item.height}px`,
+                  zIndex: isFocused ? 10 : 1,
+                  overflow: 'visible',
+                }}
               >
-                <span className="small text-muted fw-bold text-truncate" title={item.path}>
-                  {item.path}
-                </span>
-                {item.isString ? (
-                  <div className="d-flex gap-2 mt-1">
-                    <textarea
-                      className="form-control form-control-sm text-body bg-body flex-grow-1"
-                      rows="3"
-                      style={{ resize: 'none' }}
-                      value={item.value}
-                      onChange={(e) => handleValueChange(item.realIndex, e.target.value)}
+                <div className="d-flex align-items-start w-100">
+                  <div className="form-check me-3 mt-1">
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      checked={item.selected}
+                      onChange={() => toggleSelection(item.originalIndex)}
+                      disabled={!item.isString}
                     />
+                  </div>
+                  <div className="flex-grow-1 d-flex flex-column" style={{ minWidth: 0 }}>
+                    <span className="small text-muted fw-bold text-truncate mb-1" title={item.path}>
+                      {item.keyName}
+                    </span>
+
+                    {item.isString ? (
+                      <div className="d-flex gap-2">
+                        <textarea
+                          className="form-control form-control-sm text-body bg-body flex-grow-1 shadow-sm"
+                          rows="2"
+                          style={{ resize: 'vertical', minHeight: '60px', maxHeight: '300px' }}
+                          value={item.value}
+                          onFocus={() => setActiveRowIndex(item.originalIndex)}
+                          onBlur={() => setActiveRowIndex(-1)}
+                          onChange={(e) => handleValueChange(item.originalIndex, e.target.value)}
+                        />
+                        <button
+                          className="btn btn-sm btn-primary text-nowrap align-self-start mt-1"
+                          onClick={() => handleTranslateSingle(item.originalIndex)}
+                          disabled={translatingIndex === item.originalIndex}
+                        >
+                          {translatingIndex === item.originalIndex ? '...' : 'Translate'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="d-flex gap-2">
+                        <textarea
+                          className="form-control form-control-sm text-body bg-body-tertiary flex-grow-1"
+                          rows="1"
+                          style={{ resize: 'vertical', minHeight: '35px' }}
+                          value={String(item.value)}
+                          onFocus={() => setActiveRowIndex(item.originalIndex)}
+                          onBlur={() => setActiveRowIndex(-1)}
+                          onChange={(e) => {
+                            let val = e.target.value;
+                            if (val === 'true') val = true;
+                            if (val === 'false') val = false;
+                            if (val === 'null') val = null;
+                            if (!isNaN(val) && val !== '') val = Number(val);
+                            handleValueChange(item.originalIndex, val);
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {item.alts && item.alts.length > 1 && (
+                      <div className="d-flex flex-wrap gap-2 align-items-center mt-2">
+                        <span className="small text-muted fw-bold text-uppercase">Versions:</span>
+                        {item.alts.map((altText, idx) => (
+                          <button
+                            key={idx}
+                            className={`btn btn-sm ${item.value === altText ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => handleValueChange(item.originalIndex, altText)}
+                          >
+                            {idx === 0 ? 'Original' : idx}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="ms-3 text-end" style={{ minWidth: '80px' }}>
                     <button
-                      className="btn btn-sm btn-primary text-nowrap align-self-center"
-                      onClick={() => handleTranslateSingle(item.realIndex)}
-                      disabled={translatingIndex === item.realIndex}
+                      className="btn btn-sm btn-outline-secondary mt-1"
+                      onClick={() => restoreOriginal(item.originalIndex)}
+                      disabled={!item.isEdited}
                     >
-                      {translatingIndex === item.realIndex ? '...' : 'Translate'}
+                      Restore
                     </button>
                   </div>
-                ) : (
-                  <div className="d-flex gap-2 mt-1">
-                    <textarea
-                      className="form-control form-control-sm text-body bg-body-secondary flex-grow-1"
-                      rows="3"
-                      style={{ resize: 'none' }}
-                      value={String(item.value)}
-                      onChange={(e) => {
-                        let val = e.target.value;
-                        if (val === 'true') val = true;
-                        if (val === 'false') val = false;
-                        if (val === 'null') val = null;
-                        if (!isNaN(val) && val !== '') val = Number(val);
-                        handleValueChange(item.realIndex, val);
-                      }}
-                    />
-                  </div>
-                )}
+                </div>
               </div>
-              <div className="ms-3 text-end" style={{ minWidth: '80px' }}>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => restoreOriginal(item.realIndex)}
-                  disabled={!item.isEdited}
-                >
-                  Restore
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
