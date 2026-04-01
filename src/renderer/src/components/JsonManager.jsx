@@ -751,6 +751,10 @@ export default function JsonManager({ executeSilentTranslation }) {
     setNewCustomHeight(100);
   };
 
+  /**
+   * @param {string} key
+   * @returns {void}
+   */
   const removeCustomKeyHeight = (key) => {
     const updated = { ...customKeyHeights };
     delete updated[key];
@@ -835,7 +839,11 @@ export default function JsonManager({ executeSilentTranslation }) {
           rowHeights[item.originalIndex] || (item.isString ? resolvedDefaultHeight : 35);
 
         // Increased padding base logic to accommodate buttons vertically better
-        let itemHeight = textAreaHeight + 50;
+        let calculatedHeight = textAreaHeight + 50;
+
+        // Ensure a minimum width of 135px for the three buttons on the right not to be cropped.
+        let itemHeight = Math.max(calculatedHeight, 135);
+
         if (hasAlts) itemHeight += 45;
 
         rows.push({
