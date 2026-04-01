@@ -62,12 +62,21 @@ const unflattenJson = (flatArray) => {
  * @param {Object} props
  * @param {string} props.value
  * @param {boolean} props.isString
+ * @param {number} props.defaultHeight
  * @param {function} props.onChange
  * @param {function} props.onFocus
  * @param {function} props.onBlur
  * @param {function} props.onHeightChange
  */
-const ResizableTextarea = ({ value, isString, onChange, onFocus, onBlur, onHeightChange }) => {
+const ResizableTextarea = ({
+  value,
+  isString,
+  defaultHeight,
+  onChange,
+  onFocus,
+  onBlur,
+  onHeightChange,
+}) => {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -85,8 +94,12 @@ const ResizableTextarea = ({ value, isString, onChange, onFocus, onBlur, onHeigh
     <textarea
       ref={ref}
       className={`form-control form-control-sm text-body flex-grow-1 ${isString ? 'bg-body shadow-sm' : 'bg-body-tertiary'}`}
-      rows={isString ? 2 : 1}
-      style={{ resize: 'vertical', minHeight: isString ? '60px' : '35px', maxHeight: '500px' }}
+      style={{
+        resize: 'vertical',
+        minHeight: isString ? `${defaultHeight}px` : '35px',
+        height: isString ? `${defaultHeight}px` : '35px',
+        maxHeight: '800px',
+      }}
       value={value}
       onFocus={onFocus}
       onBlur={onBlur}
@@ -116,6 +129,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [expandedGroups, setExpandedGroups] = useState(jsonExpandedGroups);
   const [excludedKeys, setExcludedKeys] = useState(jsonExcludedKeys);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [defaultTextareaHeight, setDefaultTextareaHeight] = useState(60);
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
@@ -729,7 +743,8 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       if (expandedGroups.has(parentPath)) {
         const hasAlts = item.alts && item.alts.length > 1;
-        const textAreaHeight = rowHeights[item.originalIndex] || (item.isString ? 60 : 35);
+        const textAreaHeight =
+          rowHeights[item.originalIndex] || (item.isString ? defaultTextareaHeight : 35);
 
         let itemHeight = textAreaHeight + 40;
         if (hasAlts) itemHeight += 45;
@@ -747,7 +762,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     });
 
     return { visibleRows: rows, totalHeight: currentTop };
-  }, [currentFlatData, expandedGroups, rowHeights, excludedKeys]);
+  }, [currentFlatData, expandedGroups, rowHeights, excludedKeys, defaultTextareaHeight]);
 
   let startIndex = 0;
   for (let i = 0; i < visibleRows.length; i++) {
@@ -791,7 +806,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             disabled={isTranslatingAny}
             title="Reset Editor and Close File"
           >
-            ✕ Reset
+            <i className="bi bi-x-lg me-1"></i>Reset
           </button>
           <button
             className="btn btn-sm btn-success fw-bold"
@@ -799,7 +814,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             disabled={!isDirty || isTranslatingAny}
             title="CTRL + S"
           >
-            Save Changes
+            <i className="bi bi-floppy me-1"></i>Save
           </button>
           <div className="vr mx-1"></div>
           <button
@@ -808,7 +823,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             disabled={historyIndex <= 0 || isTranslatingAny}
             title="CTRL + Z"
           >
-            Undo
+            <i className="bi bi-arrow-counterclockwise"></i>
           </button>
           <button
             className="btn btn-sm btn-outline-secondary"
@@ -816,14 +831,14 @@ export default function JsonManager({ executeSilentTranslation }) {
             disabled={historyIndex >= history.length - 1 || isTranslatingAny}
             title="CTRL + SHIFT + Z"
           >
-            Redo
+            <i className="bi bi-arrow-clockwise"></i>
           </button>
           <div className="vr mx-1"></div>
           <button className="btn btn-sm btn-outline-primary" onClick={expandAll}>
-            Expand All
+            <i className="bi bi-arrows-expand me-1"></i>Expand All
           </button>
           <button className="btn btn-sm btn-outline-secondary" onClick={collapseAll}>
-            Collapse All
+            <i className="bi bi-arrows-collapse me-1"></i>Collapse All
           </button>
 
           {/* Custom Multiple Selection Filter */}
@@ -832,6 +847,7 @@ export default function JsonManager({ executeSilentTranslation }) {
               className="btn btn-sm btn-outline-secondary dropdown-toggle"
               onClick={() => setFilterOpen(!filterOpen)}
             >
+              <i className="bi bi-funnel me-1"></i>
               Filter Keys{' '}
               {excludedKeys.size === 0
                 ? '(All)'
@@ -881,7 +897,19 @@ export default function JsonManager({ executeSilentTranslation }) {
               </div>
             )}
           </div>
+
+          <div className="d-flex align-items-center ms-2 gap-1" title="Default Text Height">
+            <i className="bi bi-textarea-resize text-secondary"></i>
+            <input
+              type="number"
+              className="form-control form-control-sm border-secondary text-center"
+              style={{ width: '60px' }}
+              value={defaultTextareaHeight}
+              onChange={(e) => setDefaultTextareaHeight(Number(e.target.value) || 60)}
+            />
+          </div>
         </div>
+
         <div className="d-flex flex-wrap gap-2 align-items-center">
           <span className="small text-muted me-2 border-end pe-2">
             Items: {currentFlatData.length}
@@ -916,12 +944,12 @@ export default function JsonManager({ executeSilentTranslation }) {
                 onClick={cancelTranslation}
                 title="Cancel Translation"
               >
-                ✕
+                <i className="bi bi-x-circle"></i>
               </button>
             </div>
           ) : (
             <button className="btn btn-sm btn-primary fw-bold ms-2" onClick={bulkTranslateSelected}>
-              Bulk Translate
+              <i className="bi bi-translate me-1"></i>Bulk Translate
             </button>
           )}
         </div>
@@ -954,7 +982,10 @@ export default function JsonManager({ executeSilentTranslation }) {
                   onClick={() => toggleGroup(item.groupPath)}
                 >
                   <span className="fw-bold text-primary">
-                    <span className="me-2">{isExpanded ? '▼' : '▶'}</span>[{item.groupPath}]
+                    <span className="me-2">
+                      <i className={`bi bi-caret-${isExpanded ? 'down' : 'right'}-fill`}></i>
+                    </span>
+                    [{item.groupPath}]
                   </span>
                   <div className="d-flex align-items-center gap-2">
                     <span className="badge bg-secondary">{item.itemCount} items</span>
@@ -967,7 +998,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       }}
                       title="Select all in this index"
                     >
-                      ☑
+                      <i className="bi bi-check-all"></i>
                     </button>
                     <button
                       className="btn btn-sm btn-outline-secondary py-0 px-2 fs-6"
@@ -977,7 +1008,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       }}
                       title="Deselect all in this index"
                     >
-                      ☐
+                      <i className="bi bi-square"></i>
                     </button>
 
                     {isArrayGroup && (
@@ -990,7 +1021,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                           }}
                           title="Duplicate Array Item (Create New)"
                         >
-                          ⧉
+                          <i className="bi bi-copy"></i>
                         </button>
                         <button
                           className="btn btn-sm btn-outline-danger border-0 fw-bold fs-6 py-0 px-2"
@@ -1000,7 +1031,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                           }}
                           title="Delete Array Item"
                         >
-                          🗑️
+                          <i className="bi bi-trash"></i>
                         </button>
                       </>
                     )}
@@ -1011,7 +1042,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                         setAddingKeyToGroup(item.groupPath);
                       }}
                     >
-                      + Add Key
+                      <i className="bi bi-plus-lg me-1"></i>Add Key
                     </button>
                   </div>
                 </div>
@@ -1060,6 +1091,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       <ResizableTextarea
                         value={item.isString ? item.value : String(item.value)}
                         isString={item.isString}
+                        defaultHeight={defaultTextareaHeight}
                         onFocus={() => setActiveRowIndex(item.originalIndex)}
                         onBlur={() => setActiveRowIndex(-1)}
                         onHeightChange={(h) => updateRowHeight(item.originalIndex, h)}

@@ -17,14 +17,16 @@ export default function App() {
         if (!parsed.typingDelay) parsed.typingDelay = 1000;
         if (!parsed.lmLanguages) parsed.lmLanguages = LM_HARDCODED_LANGUAGES;
         if (!parsed.theme) parsed.theme = 'auto';
+        if (!parsed.libre.apiKey) parsed.libre.apiKey = '';
+        if (!parsed.openaic.apiKey) parsed.openaic.apiKey = '';
         return parsed;
       } catch {
         // Fallback to default if JSON is corrupted
       }
     }
     return {
-      libre: { protocol: 'http', ip: '127.0.0.1:5000' },
-      openaic: { protocol: 'http', ip: '127.0.0.1:1234' },
+      libre: { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' },
+      openaic: { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' },
       typingDelay: 1000,
       lmLanguages: LM_HARDCODED_LANGUAGES,
       theme: 'auto',
@@ -82,13 +84,13 @@ export default function App() {
               className={`btn ${view === 'translator' ? 'btn-primary' : 'btn-outline-primary'}`}
               onClick={() => setView('translator')}
             >
-              Translator
+              <i className="bi bi-translate me-2"></i>Translator
             </button>
             <button
               className={`btn ${view === 'settings' ? 'btn-primary' : 'btn-outline-primary'}`}
               onClick={() => setView('settings')}
             >
-              Settings
+              <i className="bi bi-gear-fill me-2"></i>Settings
             </button>
           </div>
         </div>
@@ -126,7 +128,6 @@ export default function App() {
         {view === 'settings' ? (
           <Settings setConfig={setConfig} config={config} />
         ) : (
-          /* Added key={apiMode} here to force full re-rendering of the component when switching API */
           <Translator key={apiMode} apiMode={apiMode} config={config} />
         )}
       </main>

@@ -146,15 +146,19 @@ export default function Translator({ apiMode, config }) {
     if (!textToTranslate.trim()) return null;
     try {
       if (apiMode === 'libre') {
+        const bodyData = {
+          q: textToTranslate,
+          source: sourceLang,
+          target: targetLang,
+          format: 'text',
+          alternatives: 3,
+        };
+
+        if (config.libre.apiKey) bodyData.api_key = config.libre.apiKey;
+
         const res = await fetch(`${getBaseUrl('libre')}/translate`, {
           method: 'POST',
-          body: JSON.stringify({
-            q: textToTranslate,
-            source: sourceLang,
-            target: targetLang,
-            format: 'text',
-            alternatives: 3,
-          }),
+          body: JSON.stringify(bodyData),
           headers: { 'Content-Type': 'application/json' },
           signal,
         });
@@ -170,6 +174,12 @@ export default function Translator({ apiMode, config }) {
           sourceLang === 'auto'
             ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`
             : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`;
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (config.openaic.apiKey) {
+          headers['Authorization'] = `Bearer ${config.openaic.apiKey}`;
+        }
+
         const res = await fetch(`${getBaseUrl('openaic')}/v1/chat/completions`, {
           method: 'POST',
           body: JSON.stringify({
@@ -180,7 +190,7 @@ export default function Translator({ apiMode, config }) {
             temperature: 0.3,
             max_tokens: 1000,
           }),
-          headers: { 'Content-Type': 'application/json' },
+          headers: headers,
           signal,
         });
         const data = await res.json();
@@ -266,6 +276,8 @@ export default function Translator({ apiMode, config }) {
       formData.append('source', sourceLang);
       formData.append('target', targetLang);
 
+      if (config.libre.apiKey) formData.append('api_key', config.libre.apiKey);
+
       const translateRes = await fetch(`${getBaseUrl('libre')}/translate_file`, {
         method: 'POST',
         body: formData,
@@ -338,6 +350,15 @@ export default function Translator({ apiMode, config }) {
     setTranslatedText(translationOptions[index]);
   };
 
+  /**
+   * @returns {void}
+   */
+  const handleCopyText = () => {
+    if (translatedText) {
+      navigator.clipboard.writeText(translatedText);
+    }
+  };
+
   /** @type {boolean} */
   const isLibreEmpty = apiMode === 'libre' && libreLanguages.length === 0;
   /** @type {Array} */
@@ -406,7 +427,9 @@ export default function Translator({ apiMode, config }) {
                   )}
                 </select>
 
-                <span className="text-muted fw-bold">⇄</span>
+                <span className="text-muted fw-bold">
+                  <i className="bi bi-arrow-left-right"></i>
+                </span>
 
                 <select
                   className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
@@ -430,7 +453,7 @@ export default function Translator({ apiMode, config }) {
                   onClick={handleRefreshLanguages}
                   title="Refresh Languages"
                 >
-                  ↻
+                  <i className="bi bi-arrow-clockwise"></i>
                 </button>
               </div>
               <div className="card-body d-flex flex-column p-0 border-top">
@@ -464,7 +487,7 @@ export default function Translator({ apiMode, config }) {
                     onClick={handleRefreshLanguages}
                     title="Refresh Languages"
                   >
-                    ↻
+                    <i className="bi bi-arrow-clockwise"></i>
                   </button>
                 </div>
                 <div className="card-body d-flex flex-column">
@@ -512,7 +535,7 @@ export default function Translator({ apiMode, config }) {
                       : 'Swap languages'
                   }
                 >
-                  ⇄
+                  <i className="bi bi-arrow-left-right"></i>
                 </button>
               </div>
             )}
@@ -538,7 +561,7 @@ export default function Translator({ apiMode, config }) {
                   </select>
                   {apiMode === 'openaic' && inputMode === 'text' && (
                     <button
-                      className="btn btn-primary fw-bold px-4"
+                      className="btn btn-primary fw-bold px-4 ms-2"
                       disabled={isTranslating || isLibreEmpty}
                       onClick={() => executeTranslation(sourceText)}
                     >
@@ -546,14 +569,25 @@ export default function Translator({ apiMode, config }) {
                     </button>
                   )}
                 </div>
-                <div className="card-body d-flex flex-column">
+                <div className="card-body d-flex flex-column position-relative">
                   {inputMode === 'text' ? (
-                    <textarea
-                      className="form-control border-0 fs-4 bg-body text-body flex-grow-1"
-                      style={{ resize: 'none', boxShadow: 'none' }}
-                      readOnly
-                      value={translatedText}
-                    />
+                    <>
+                      <textarea
+                        className="form-control border-0 fs-4 bg-body text-body flex-grow-1 pb-4"
+                        style={{ resize: 'none', boxShadow: 'none' }}
+                        readOnly
+                        value={translatedText}
+                      />
+                      {translatedText && (
+                        <button
+                          className="btn btn-sm btn-outline-secondary position-absolute bottom-0 end-0 m-3"
+                          onClick={handleCopyText}
+                          title="Copy translated text"
+                        >
+                          <i className="bi bi-clipboard me-1"></i>Copy
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <div className="d-flex align-items-center justify-content-center h-100">
                       <span className="text-muted fs-5">

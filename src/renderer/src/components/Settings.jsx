@@ -5,12 +5,14 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  * @typedef {Object} LibreConfig
  * @property {string} protocol
  * @property {string} ip
+ * @property {string} apiKey
  */
 
 /**
  * @typedef {Object} OpenAicConfig
  * @property {string} protocol
  * @property {string} ip
+ * @property {string} apiKey
  */
 
 /**
@@ -131,7 +133,9 @@ export default function Settings({ config, setConfig }) {
       <div className="col-md-6">
         <div className="card shadow-sm h-100 border-0">
           <div className="card-header bg-body-secondary text-body d-flex justify-content-between align-items-center">
-            <span className="fw-bold">Global Settings</span>
+            <span className="fw-bold">
+              <i className="bi bi-sliders me-2"></i>Global Settings
+            </span>
             <div>
               <input
                 type="file"
@@ -144,16 +148,16 @@ export default function Settings({ config, setConfig }) {
                 className="btn btn-sm btn-outline-secondary me-2"
                 onClick={() => fileInputRef.current?.click()}
               >
-                Import
+                <i className="bi bi-upload me-1"></i>Import
               </button>
               <button className="btn btn-sm btn-secondary" onClick={handleExport}>
-                Export
+                <i className="bi bi-download me-1"></i>Export
               </button>
             </div>
           </div>
           <div className="card-body bg-body">
             <h5 className="mb-3">LibreTranslate API</h5>
-            <div className="input-group mb-4">
+            <div className="input-group mb-2">
               <select
                 className="form-select flex-grow-0"
                 style={{ width: '100px' }}
@@ -175,9 +179,20 @@ export default function Settings({ config, setConfig }) {
                 }
               />
             </div>
+            <div className="mb-4">
+              <input
+                type="password"
+                className="form-control"
+                placeholder="API Key (Optional)"
+                value={config.libre.apiKey || ''}
+                onChange={(e) =>
+                  setConfig({ ...config, libre: { ...config.libre, apiKey: e.target.value } })
+                }
+              />
+            </div>
 
             <h5 className="mb-3">OpenAi Compatible API</h5>
-            <div className="input-group mb-4">
+            <div className="input-group mb-2">
               <select
                 className="form-select flex-grow-0"
                 style={{ width: '100px' }}
@@ -199,6 +214,17 @@ export default function Settings({ config, setConfig }) {
                 value={config.openaic.ip}
                 onChange={(e) =>
                   setConfig({ ...config, openaic: { ...config.openaic, ip: e.target.value } })
+                }
+              />
+            </div>
+            <div className="mb-4">
+              <input
+                type="password"
+                className="form-control"
+                placeholder="API Key (Optional)"
+                value={config.openaic.apiKey || ''}
+                onChange={(e) =>
+                  setConfig({ ...config, openaic: { ...config.openaic, apiKey: e.target.value } })
                 }
               />
             </div>
@@ -235,9 +261,11 @@ export default function Settings({ config, setConfig }) {
       <div className="col-md-6">
         <div className="card shadow-sm h-100 border-0">
           <div className="card-header bg-body-secondary text-body d-flex justify-content-between align-items-center">
-            <span className="fw-bold">OpenAi Compatible Languages</span>
+            <span className="fw-bold">
+              <i className="bi bi-globe me-2"></i>OpenAi Compatible Languages
+            </span>
             <button className="btn btn-sm btn-secondary fw-bold" onClick={addLanguage}>
-              + Add
+              <i className="bi bi-plus-lg me-1"></i>Add
             </button>
           </div>
           <div className="card-body bg-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
@@ -268,7 +296,7 @@ export default function Settings({ config, setConfig }) {
                     onClick={() => removeLanguage(index)}
                     disabled={lang.code === 'auto'}
                   >
-                    ✕
+                    <i className="bi bi-x-lg"></i>
                   </button>
                 </div>
               </div>
