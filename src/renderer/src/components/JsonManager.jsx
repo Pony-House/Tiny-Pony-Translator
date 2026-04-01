@@ -54,16 +54,60 @@ const unflattenJson = (flatArray) => {
 };
 
 /**
+ * @param {Object} props
+ * @param {string} props.value
+ * @param {boolean} props.isString
+ * @param {function} props.onChange
+ * @param {function} props.onFocus
+ * @param {function} props.onBlur
+ * @param {function} props.onHeightChange
+ */
+const ResizableTextarea = ({ value, isString, onChange, onFocus, onBlur, onHeightChange }) => {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        onHeightChange(entry.contentRect.height);
+      }
+    });
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [onHeightChange]);
+
+  return (
+    <textarea
+      ref={ref}
+      className={`form-control form-control-sm text-body flex-grow-1 ${isString ? 'bg-body shadow-sm' : 'bg-body-tertiary'}`}
+      rows={isString ? 2 : 1}
+      style={{ resize: 'vertical', minHeight: isString ? '60px' : '35px', maxHeight: '500px' }}
+      value={value}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onChange={onChange}
+    />
+  );
+};
+
+let jsonHistory = [];
+let jsonHistoryIndex = -1;
+let jsonOriginalFlat = [];
+let jsonExpandedGroups = new Set();
+let jsonFilePath = null;
+
+/**
  * @param {Object} options
  * @param {Function} options.executeSilentTranslation
  * @returns {JSX.Element}
  */
 export default function JsonManager({ executeSilentTranslation }) {
-  const [filePath, setFilePath] = useState(null);
+  const [filePath, setFilePath] = useState(jsonFilePath);
 
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [originalFlat, setOriginalFlat] = useState([]);
+  const [history, setHistory] = useState(jsonHistory);
+  const [historyIndex, setHistoryIndex] = useState(jsonHistoryIndex);
+  const [originalFlat, setOriginalFlat] = useState(jsonOriginalFlat);
+  const [expandedGroups, setExpandedGroups] = useState(jsonExpandedGroups);
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
@@ -71,15 +115,30 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const [isBulkTranslating, setIsBulkTranslating] = useState(false);
   const [translatingIndex, setTranslatingIndex] = useState(-1);
-
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [activeRowIndex, setActiveRowIndex] = useState(-1);
+  const [rowHeights, setRowHeights] = useState({});
+
+  const [compareItem, setCompareItem] = useState(null);
+  const [addingKeyToGroup, setAddingKeyToGroup] = useState(null);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyType, setNewKeyType] = useState('string');
 
   /**
    * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean, alts: string[]}>}
    */
   const currentFlatData = history[historyIndex] || [];
   const isDirty = historyIndex > 0;
+
+  useEffect(() => {
+    if (filePath) sessionStorage.setItem('json_filePath', filePath);
+    else sessionStorage.removeItem('json_filePath');
+
+    jsonFilePath = filePath;
+    jsonHistory = history;
+    jsonHistoryIndex = historyIndex;
+    jsonOriginalFlat = originalFlat;
+    jsonExpandedGroups = expandedGroups;
+  }, [filePath, history, historyIndex, originalFlat, expandedGroups]);
 
   /**
    * @param {Array} newData
@@ -113,6 +172,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           setHistory([flat]);
           setHistoryIndex(0);
           setExpandedGroups(new Set());
+          setRowHeights({});
         } catch {
           alert('Invalid JSON file.');
         }
@@ -120,7 +180,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!window.api || !filePath) return;
     try {
       const reconstructed = unflattenJson(currentFlatData);
@@ -137,6 +197,21 @@ export default function JsonManager({ executeSilentTranslation }) {
       }
     } catch {
       alert('Failed to save JSON.');
+    }
+  }, [filePath, currentFlatData]);
+
+  const handleReset = () => {
+    if (
+      window.confirm(
+        'Are you sure you want to close this file and reset the editor? Unsaved changes will be lost.',
+      )
+    ) {
+      setFilePath(null);
+      setHistory([]);
+      setHistoryIndex(-1);
+      setOriginalFlat([]);
+      setExpandedGroups(new Set());
+      setRowHeights({});
     }
   };
 
@@ -192,6 +267,20 @@ export default function JsonManager({ executeSilentTranslation }) {
     pushHistory(newData);
   };
 
+  /**
+   * @param {number} index
+   * @returns {void}
+   */
+  const removeKey = (index) => {
+    if (
+      window.confirm(`Are you sure you want to remove this key? (${currentFlatData[index].path})`)
+    ) {
+      const newData = [...currentFlatData];
+      newData.splice(index, 1);
+      pushHistory(newData);
+    }
+  };
+
   const undo = useCallback(() => {
     if (historyIndex > 0) setHistoryIndex(historyIndex - 1);
   }, [historyIndex]);
@@ -202,17 +291,23 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.key === 'z') {
+      if (e.ctrlKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (isDirty) handleSave();
+      } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        redo();
+      } else if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undo();
-      } else if (e.ctrlKey && e.key === 'y') {
+      } else if (e.ctrlKey && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         redo();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
+  }, [undo, redo, handleSave, isDirty]);
 
   /**
    * @param {string} groupPath
@@ -238,6 +333,18 @@ export default function JsonManager({ executeSilentTranslation }) {
   };
 
   const collapseAll = () => setExpandedGroups(new Set());
+
+  /**
+   * @param {number} index
+   * @param {number} height
+   * @returns {void}
+   */
+  const updateRowHeight = useCallback((index, height) => {
+    setRowHeights((prev) => {
+      if (Math.abs((prev[index] || 0) - height) < 5) return prev;
+      return { ...prev, [index]: height };
+    });
+  }, []);
 
   /**
    * @param {number} index
@@ -292,12 +399,83 @@ export default function JsonManager({ executeSilentTranslation }) {
     setIsBulkTranslating(false);
   };
 
+  /**
+   * @param {string} targetGroup
+   * @returns {Array<{name: string, type: string}>}
+   */
+  const getSuggestedKeys = (targetGroup) => {
+    const match = targetGroup.match(/^(.*)\.(\d+)$/);
+    if (!match) return [];
+
+    const parentArray = match[1];
+    const allArrayItems = currentFlatData.filter((i) => i.path.startsWith(parentArray + '.'));
+
+    /** @type {Map<string, string>} */
+    const knownKeys = new Map();
+
+    allArrayItems.forEach((i) => {
+      const subMatch = i.path.substring(parentArray.length + 1).match(/^\d+\.(.+)$/);
+      if (subMatch) knownKeys.set(subMatch[1], i.isString ? 'string' : typeof i.value);
+    });
+
+    const existingKeys = currentFlatData
+      .filter((i) => i.path.startsWith(targetGroup + '.'))
+      .map((i) => i.path.substring(targetGroup.length + 1));
+
+    existingKeys.forEach((k) => knownKeys.delete(k));
+
+    return Array.from(knownKeys.entries()).map(([name, type]) => ({ name, type }));
+  };
+
+  const handleAddCustomKey = () => {
+    if (!newKeyName.trim() || !addingKeyToGroup) return;
+
+    const fullPath = addingKeyToGroup === 'Root' ? newKeyName : `${addingKeyToGroup}.${newKeyName}`;
+
+    if (currentFlatData.some((i) => i.path === fullPath)) {
+      alert('This key already exists in this group!');
+      return;
+    }
+
+    /** @type {any} */
+    let defaultValue = '';
+    if (newKeyType === 'number') defaultValue = 0;
+    if (newKeyType === 'boolean') defaultValue = false;
+    if (newKeyType === 'null') defaultValue = null;
+
+    const newItem = {
+      path: fullPath,
+      value: defaultValue,
+      original: defaultValue,
+      isString: newKeyType === 'string',
+      isEdited: true,
+      selected: false,
+      alts: [],
+    };
+
+    let insertIndex = currentFlatData.length;
+    if (addingKeyToGroup !== 'Root') {
+      for (let i = currentFlatData.length - 1; i >= 0; i--) {
+        if (currentFlatData[i].path.startsWith(addingKeyToGroup + '.')) {
+          insertIndex = i + 1;
+          break;
+        }
+      }
+    }
+
+    const newData = [...currentFlatData];
+    newData.splice(insertIndex, 0, newItem);
+    pushHistory(newData);
+    setAddingKeyToGroup(null);
+    setNewKeyName('');
+    setExpandedGroups((prev) => new Set(prev).add(addingKeyToGroup));
+  };
+
   // Pre-calculate visual layout and heights based on expanded states
   const { visibleRows, totalHeight } = useMemo(() => {
     const rows = [];
     let currentGroup = null;
     let currentTop = 0;
-    let groupItemCount = 0;
 
     currentFlatData.forEach((item, originalIndex) => {
       const lastDot = item.path.lastIndexOf('.');
@@ -306,7 +484,7 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       if (parentPath !== currentGroup) {
         currentGroup = parentPath;
-        groupItemCount = currentFlatData.filter((i) => {
+        const groupItemCount = currentFlatData.filter((i) => {
           const lDot = i.path.lastIndexOf('.');
           const pPath = lDot > 0 ? i.path.substring(0, lDot) : 'Root';
           return pPath === parentPath;
@@ -325,8 +503,10 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       if (expandedGroups.has(parentPath)) {
         const hasAlts = item.alts && item.alts.length > 1;
-        const baseHeight = 110;
-        const itemHeight = hasAlts ? baseHeight + 45 : baseHeight;
+        const textAreaHeight = rowHeights[originalIndex] || (item.isString ? 60 : 35);
+
+        let itemHeight = textAreaHeight + 40;
+        if (hasAlts) itemHeight += 45;
 
         rows.push({
           ...item,
@@ -342,7 +522,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     });
 
     return { visibleRows: rows, totalHeight: currentTop };
-  }, [currentFlatData, expandedGroups]);
+  }, [currentFlatData, expandedGroups, rowHeights]);
 
   // Derive visible items based on scroll
   let startIndex = 0;
@@ -353,14 +533,11 @@ export default function JsonManager({ executeSilentTranslation }) {
     }
   }
 
-  const visibleCount = Math.ceil(viewportHeight / 50) + 5;
+  const visibleCount = Math.ceil(viewportHeight / 50) + 10;
   const visibleItems = visibleRows.slice(startIndex, startIndex + visibleCount);
 
   useEffect(() => {
-    if (containerRef.current) {
-      setViewportHeight(containerRef.current.clientHeight);
-    }
-
+    if (containerRef.current) setViewportHeight(containerRef.current.clientHeight);
     const handleResize = () => {
       if (containerRef.current) setViewportHeight(containerRef.current.clientHeight);
     };
@@ -370,7 +547,7 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   if (!filePath) {
     return (
-      <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-body">
+      <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-body py-5">
         <h4 className="text-secondary mb-3">No JSON File Loaded</h4>
         <button className="btn btn-primary px-4 fw-bold shadow-sm" onClick={handleOpen}>
           Open JSON File
@@ -380,17 +557,22 @@ export default function JsonManager({ executeSilentTranslation }) {
   }
 
   return (
-    <div className="d-flex flex-column h-100 bg-body p-3">
-      {/* Toolbar */}
-      <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-body-tertiary p-2 rounded border gap-2">
+    <div className="d-flex flex-column h-100 bg-body p-3 w-100 overflow-hidden">
+      {/* Editor Toolbar */}
+      <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-body-tertiary p-2 rounded border gap-2 flex-shrink-0">
         <div className="d-flex flex-wrap gap-2 align-items-center">
-          <button className="btn btn-sm btn-outline-secondary fw-bold" onClick={handleOpen}>
-            Open File
+          <button
+            className="btn btn-sm btn-outline-danger fw-bold"
+            onClick={handleReset}
+            title="Reset Editor and Close File"
+          >
+            ✕ Reset
           </button>
           <button
             className="btn btn-sm btn-success fw-bold"
             onClick={handleSave}
             disabled={!isDirty}
+            title="CTRL + S"
           >
             Save Changes
           </button>
@@ -399,6 +581,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             className="btn btn-sm btn-outline-secondary"
             onClick={undo}
             disabled={historyIndex <= 0}
+            title="CTRL + Z"
           >
             Undo
           </button>
@@ -406,6 +589,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             className="btn btn-sm btn-outline-secondary"
             onClick={redo}
             disabled={historyIndex >= history.length - 1}
+            title="CTRL + SHIFT + Z"
           >
             Redo
           </button>
@@ -438,9 +622,9 @@ export default function JsonManager({ executeSilentTranslation }) {
       {/* Virtualized Container */}
       <div
         ref={containerRef}
-        className="flex-grow-1 overflow-auto border rounded bg-body position-relative"
+        className="overflow-auto border rounded bg-body position-relative"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        style={{ height: '0px' }}
+        style={{ height: '70vh' }}
       >
         <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
           {visibleItems.map((item) => {
@@ -449,7 +633,7 @@ export default function JsonManager({ executeSilentTranslation }) {
               return (
                 <div
                   key={item.id}
-                  className="position-absolute w-100 px-3 bg-body-secondary border-bottom d-flex align-items-center justify-content-between cursor-pointer"
+                  className="position-absolute w-100 px-3 bg-body-secondary border-bottom d-flex align-items-center justify-content-between"
                   style={{
                     top: `${item.top}px`,
                     height: `${item.height}px`,
@@ -461,7 +645,18 @@ export default function JsonManager({ executeSilentTranslation }) {
                   <span className="fw-bold text-primary">
                     <span className="me-2">{isExpanded ? '▼' : '▶'}</span>[{item.groupPath}]
                   </span>
-                  <span className="badge bg-secondary">{item.itemCount} items</span>
+                  <div className="d-flex align-items-center gap-3">
+                    <span className="badge bg-secondary">{item.itemCount} items</span>
+                    <button
+                      className="btn btn-sm btn-outline-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAddingKeyToGroup(item.groupPath);
+                      }}
+                    >
+                      + Add Key
+                    </button>
+                  </div>
                 </div>
               );
             }
@@ -476,7 +671,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                   top: `${item.top}px`,
                   height: `${item.height}px`,
                   zIndex: isFocused ? 10 : 1,
-                  overflow: 'visible',
+                  overflow: 'hidden',
                 }}
               >
                 <div className="d-flex align-items-start w-100">
@@ -490,21 +685,39 @@ export default function JsonManager({ executeSilentTranslation }) {
                     />
                   </div>
                   <div className="flex-grow-1 d-flex flex-column" style={{ minWidth: 0 }}>
-                    <span className="small text-muted fw-bold text-truncate mb-1" title={item.path}>
-                      {item.keyName}
-                    </span>
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="small text-muted fw-bold text-truncate" title={item.path}>
+                        {item.keyName}
+                      </span>
+                      {item.isEdited && (
+                        <button
+                          className="btn btn-link btn-sm p-0 text-decoration-none"
+                          onClick={() => setCompareItem(item)}
+                        >
+                          Compare Original
+                        </button>
+                      )}
+                    </div>
 
-                    {item.isString ? (
-                      <div className="d-flex gap-2">
-                        <textarea
-                          className="form-control form-control-sm text-body bg-body flex-grow-1 shadow-sm"
-                          rows="2"
-                          style={{ resize: 'vertical', minHeight: '60px', maxHeight: '300px' }}
-                          value={item.value}
-                          onFocus={() => setActiveRowIndex(item.originalIndex)}
-                          onBlur={() => setActiveRowIndex(-1)}
-                          onChange={(e) => handleValueChange(item.originalIndex, e.target.value)}
-                        />
+                    <div className="d-flex gap-2">
+                      <ResizableTextarea
+                        value={item.isString ? item.value : String(item.value)}
+                        isString={item.isString}
+                        onFocus={() => setActiveRowIndex(item.originalIndex)}
+                        onBlur={() => setActiveRowIndex(-1)}
+                        onHeightChange={(h) => updateRowHeight(item.originalIndex, h)}
+                        onChange={(e) => {
+                          let val = e.target.value;
+                          if (!item.isString) {
+                            if (val === 'true') val = true;
+                            if (val === 'false') val = false;
+                            if (val === 'null') val = null;
+                            if (!isNaN(val) && val !== '') val = Number(val);
+                          }
+                          handleValueChange(item.originalIndex, val);
+                        }}
+                      />
+                      {item.isString && (
                         <button
                           className="btn btn-sm btn-primary text-nowrap align-self-start mt-1"
                           onClick={() => handleTranslateSingle(item.originalIndex)}
@@ -512,27 +725,8 @@ export default function JsonManager({ executeSilentTranslation }) {
                         >
                           {translatingIndex === item.originalIndex ? '...' : 'Translate'}
                         </button>
-                      </div>
-                    ) : (
-                      <div className="d-flex gap-2">
-                        <textarea
-                          className="form-control form-control-sm text-body bg-body-tertiary flex-grow-1"
-                          rows="1"
-                          style={{ resize: 'vertical', minHeight: '35px' }}
-                          value={String(item.value)}
-                          onFocus={() => setActiveRowIndex(item.originalIndex)}
-                          onBlur={() => setActiveRowIndex(-1)}
-                          onChange={(e) => {
-                            let val = e.target.value;
-                            if (val === 'true') val = true;
-                            if (val === 'false') val = false;
-                            if (val === 'null') val = null;
-                            if (!isNaN(val) && val !== '') val = Number(val);
-                            handleValueChange(item.originalIndex, val);
-                          }}
-                        />
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {item.alts && item.alts.length > 1 && (
                       <div className="d-flex flex-wrap gap-2 align-items-center mt-2">
@@ -549,13 +743,22 @@ export default function JsonManager({ executeSilentTranslation }) {
                       </div>
                     )}
                   </div>
-                  <div className="ms-3 text-end" style={{ minWidth: '80px' }}>
+                  <div
+                    className="ms-3 text-end d-flex flex-column gap-1"
+                    style={{ minWidth: '80px' }}
+                  >
                     <button
                       className="btn btn-sm btn-outline-secondary mt-1"
                       onClick={() => restoreOriginal(item.originalIndex)}
                       disabled={!item.isEdited}
                     >
                       Restore
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => removeKey(item.originalIndex)}
+                    >
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -564,6 +767,143 @@ export default function JsonManager({ executeSilentTranslation }) {
           })}
         </div>
       </div>
+
+      {/* Add Key Modal */}
+      {addingKeyToGroup && (
+        <div
+          className="modal show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
+        >
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content bg-body text-body shadow-lg border-0">
+              <div className="modal-header bg-body-tertiary">
+                <h5 className="modal-title fw-bold">Add Property to [{addingKeyToGroup}]</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setAddingKeyToGroup(null)}
+                ></button>
+              </div>
+              <div className="modal-body">
+                {getSuggestedKeys(addingKeyToGroup).length > 0 && (
+                  <div className="mb-4">
+                    <label className="form-label fw-bold text-success small text-uppercase">
+                      Recognized missing keys
+                    </label>
+                    <div className="d-flex flex-wrap gap-2">
+                      {getSuggestedKeys(addingKeyToGroup).map((sg) => (
+                        <button
+                          key={sg.name}
+                          className="btn btn-sm btn-outline-success"
+                          onClick={() => {
+                            setNewKeyName(sg.name);
+                            setNewKeyType(sg.type);
+                          }}
+                        >
+                          {sg.name} <span className="badge bg-success ms-1">{sg.type}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <hr />
+
+                <label className="form-label fw-bold small text-uppercase">Custom Key</label>
+                <div className="input-group mb-3">
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Key name..."
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                  />
+                  <select
+                    className="form-select"
+                    style={{ maxWidth: '120px' }}
+                    value={newKeyType}
+                    onChange={(e) => setNewKeyType(e.target.value)}
+                  >
+                    <option value="string">String</option>
+                    <option value="number">Number</option>
+                    <option value="boolean">Boolean</option>
+                    <option value="null">Null</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setAddingKeyToGroup(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary fw-bold"
+                  onClick={handleAddCustomKey}
+                  disabled={!newKeyName.trim()}
+                >
+                  Add Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diff Modal */}
+      {compareItem && (
+        <div
+          className="modal show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-lg">
+            <div className="modal-content bg-body text-body shadow-lg border-0">
+              <div className="modal-header bg-body-tertiary">
+                <h5 className="modal-title fw-bold">Comparing: {compareItem.path}</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setCompareItem(null)}
+                ></button>
+              </div>
+              <div className="modal-body row g-3">
+                <div className="col-6">
+                  <label className="form-label fw-bold text-danger">Original Version</label>
+                  <textarea
+                    className="form-control bg-danger-subtle text-danger"
+                    rows="5"
+                    readOnly
+                    value={String(compareItem.original)}
+                  />
+                </div>
+                <div className="col-6">
+                  <label className="form-label fw-bold text-success">Edited Version</label>
+                  <textarea
+                    className="form-control bg-success-subtle text-success"
+                    rows="5"
+                    readOnly
+                    value={String(compareItem.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer border-0">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setCompareItem(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

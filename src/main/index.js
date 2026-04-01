@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { electronApp, is } from '@electron-toolkit/utils';
+import { is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
 let mainWindow = null;
@@ -73,7 +73,7 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron');
+  app.setAppUserModelId('com.jasmindreasond.iny-pony-translator');
 
   createWindow();
 
