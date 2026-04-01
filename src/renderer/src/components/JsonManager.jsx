@@ -256,6 +256,46 @@ export default function JsonManager({ executeSilentTranslation }) {
     }
   }, [filePath, currentFlatData, isTranslatingAny]);
 
+  /**
+   * Smart Single Save - Save only the edits of one item and ignore those pending for others
+   * @param {number} index
+   * @returns {Promise<void>}
+   */
+  const handleSaveSingle = async (index) => {
+    if (!window.api || !filePath || isTranslatingAny) return;
+
+    // Build a hybrid array: Keep the new value only for the current item, and restore the 'original' to others.
+    const partialData = currentFlatData.map((item, i) => {
+      if (i === index) return item;
+      return { ...item, value: item.original };
+    });
+
+    try {
+      const reconstructed = unflattenJson(partialData);
+      const success = await window.api.saveJson(filePath, JSON.stringify(reconstructed, null, 2));
+
+      if (success) {
+        // Update the original baseline to exactly mirror what was saved on the disk
+        setOriginalFlat(partialData.map((item) => ({ ...item, original: item.value })));
+
+        // Update live data on the screen: The clicked item becomes as "saved" (not edited).
+        // The others keep the pending state compared with the new baseline of the file.
+        const newData = currentFlatData.map((item, i) => {
+          const newOriginal = partialData[i].value;
+          return {
+            ...item,
+            original: newOriginal,
+            isEdited: item.value !== newOriginal,
+          };
+        });
+
+        pushHistory(newData);
+      }
+    } catch {
+      alert('Failed to save individual item.');
+    }
+  };
+
   const handleReset = () => {
     if (
       window.confirm(
@@ -814,7 +854,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             disabled={!isDirty || isTranslatingAny}
             title="CTRL + S"
           >
-            <i className="bi bi-floppy me-1"></i>Save
+            <i className="bi bi-floppy me-1"></i>Save All
           </button>
           <div className="vr mx-1"></div>
           <button
@@ -1137,7 +1177,15 @@ export default function JsonManager({ executeSilentTranslation }) {
                     style={{ minWidth: '80px' }}
                   >
                     <button
-                      className="btn btn-sm btn-outline-secondary mt-1"
+                      className="btn btn-sm btn-outline-success mt-1"
+                      onClick={() => handleSaveSingle(item.originalIndex)}
+                      disabled={!item.isEdited || isTranslatingAny}
+                      title="Save ONLY this change to file"
+                    >
+                      <i className="bi bi-floppy me-1"></i>Save
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
                       onClick={() => restoreOriginal(item.originalIndex)}
                       disabled={!item.isEdited || isTranslatingAny}
                     >
@@ -1295,6 +1343,18 @@ export default function JsonManager({ executeSilentTranslation }) {
                 </div>
               </div>
               <div className="modal-footer border-0">
+                <button
+                  type="button"
+                  className="btn btn-success fw-bold me-auto"
+                  onClick={() => {
+                    handleSaveSingle(compareItemIndex);
+                    setCompareItemIndex(-1);
+                  }}
+                  disabled={!compareItemData.isEdited}
+                  title="Save ONLY this change to file"
+                >
+                  <i className="bi bi-floppy me-1"></i>Save Value
+                </button>
                 <button
                   type="button"
                   className="btn btn-primary"
