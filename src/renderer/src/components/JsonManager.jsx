@@ -94,8 +94,8 @@ let jsonHistory = [];
 let jsonHistoryIndex = -1;
 let jsonOriginalFlat = [];
 let jsonExpandedGroups = new Set();
+let jsonExcludedKeys = new Set();
 let jsonFilePath = null;
-let jsonKeyFilter = 'ALL';
 
 /**
  * @param {Object} options
@@ -109,18 +109,22 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [historyIndex, setHistoryIndex] = useState(jsonHistoryIndex);
   const [originalFlat, setOriginalFlat] = useState(jsonOriginalFlat);
   const [expandedGroups, setExpandedGroups] = useState(jsonExpandedGroups);
-  const [keyFilter, setKeyFilter] = useState(jsonKeyFilter);
+  const [excludedKeys, setExcludedKeys] = useState(jsonExcludedKeys);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
   const containerRef = useRef(null);
+  const filterDropdownRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const [isBulkTranslating, setIsBulkTranslating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [translatingIndex, setTranslatingIndex] = useState(-1);
   const [activeRowIndex, setActiveRowIndex] = useState(-1);
   const [rowHeights, setRowHeights] = useState({});
 
-  const [compareItem, setCompareItem] = useState(null);
+  const [compareItemIndex, setCompareItemIndex] = useState(-1);
   const [addingKeyToGroup, setAddingKeyToGroup] = useState(null);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyType, setNewKeyType] = useState('string');
@@ -133,6 +137,8 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   // Lock safety variable
   const isTranslatingAny = isBulkTranslating || translatingIndex !== -1;
+  const selectedCount = currentFlatData.filter((i) => i.selected).length;
+  const compareItemData = compareItemIndex >= 0 ? currentFlatData[compareItemIndex] : null;
 
   useEffect(() => {
     if (filePath) sessionStorage.setItem('json_filePath', filePath);
@@ -143,8 +149,21 @@ export default function JsonManager({ executeSilentTranslation }) {
     jsonHistoryIndex = historyIndex;
     jsonOriginalFlat = originalFlat;
     jsonExpandedGroups = expandedGroups;
-    jsonKeyFilter = keyFilter;
-  }, [filePath, history, historyIndex, originalFlat, expandedGroups, keyFilter]);
+    jsonExcludedKeys = excludedKeys;
+  }, [filePath, history, historyIndex, originalFlat, expandedGroups, excludedKeys]);
+
+  /**
+   * Fechar dropdown de filtros ao clicar fora
+   */
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   /**
    * @param {Array} newData
@@ -178,8 +197,8 @@ export default function JsonManager({ executeSilentTranslation }) {
           setHistory([flat]);
           setHistoryIndex(0);
           setExpandedGroups(new Set());
+          setExcludedKeys(new Set());
           setRowHeights({});
-          setKeyFilter('ALL');
         } catch {
           alert('Invalid JSON file.');
         }
@@ -218,8 +237,8 @@ export default function JsonManager({ executeSilentTranslation }) {
       setHistoryIndex(-1);
       setOriginalFlat([]);
       setExpandedGroups(new Set());
+      setExcludedKeys(new Set());
       setRowHeights({});
-      setKeyFilter('ALL');
     }
   };
 
@@ -252,9 +271,9 @@ export default function JsonManager({ executeSilentTranslation }) {
     const newData = currentFlatData.map((item) => {
       const lastDot = item.path.lastIndexOf('.');
       const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
-      const matchesFilter = keyFilter === 'ALL' || keyName === keyFilter;
+      const isVisible = !excludedKeys.has(keyName);
 
-      if (item.isString && matchesFilter) {
+      if (item.isString && isVisible) {
         return { ...item, selected: true };
       }
       return item;
@@ -264,6 +283,26 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const deselectAll = () => {
     const newData = currentFlatData.map((item) => ({ ...item, selected: false }));
+    pushHistory(newData);
+  };
+
+  const selectGroup = (groupPath) => {
+    const newData = currentFlatData.map((item) => {
+      if (item.isString && (item.path === groupPath || item.path.startsWith(groupPath + '.'))) {
+        return { ...item, selected: true };
+      }
+      return item;
+    });
+    pushHistory(newData);
+  };
+
+  const deselectGroup = (groupPath) => {
+    const newData = currentFlatData.map((item) => {
+      if (item.path === groupPath || item.path.startsWith(groupPath + '.')) {
+        return { ...item, selected: false };
+      }
+      return item;
+    });
     pushHistory(newData);
   };
 
@@ -304,9 +343,14 @@ export default function JsonManager({ executeSilentTranslation }) {
     if (historyIndex < history.length - 1 && !isTranslatingAny) setHistoryIndex(historyIndex + 1);
   }, [historyIndex, history.length, isTranslatingAny]);
 
+  // Global Keydown
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.key.toLowerCase() === 's') {
+      if (e.key === 'Escape') {
+        setCompareItemIndex(-1);
+        setAddingKeyToGroup(null);
+        setFilterOpen(false);
+      } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (isDirty && !isTranslatingAny) handleSave();
       } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
@@ -349,6 +393,81 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const collapseAll = () => setExpandedGroups(new Set());
 
+  const handleDeleteGroup = (groupPath) => {
+    if (!window.confirm(`Are you sure you want to delete the entire array item [${groupPath}]?`))
+      return;
+
+    let newData = currentFlatData.filter(
+      (i) => i.path !== groupPath && !i.path.startsWith(groupPath + '.'),
+    );
+
+    const match = groupPath.match(/^(.*)\.(\d+)$/);
+    if (match) {
+      const parentStr = match[1];
+      const deletedIdx = parseInt(match[2], 10);
+      newData = newData.map((item) => {
+        if (item.path.startsWith(parentStr + '.')) {
+          const subMatch = item.path.substring(parentStr.length + 1).match(/^(\d+)(.*)$/);
+          if (subMatch) {
+            const idx = parseInt(subMatch[1], 10);
+            if (idx > deletedIdx) {
+              const newPath = `${parentStr}.${idx - 1}${subMatch[2]}`;
+              return { ...item, path: newPath };
+            }
+          }
+        }
+        return item;
+      });
+    }
+    pushHistory(newData);
+  };
+
+  const handleCloneGroup = (groupPath) => {
+    const match = groupPath.match(/^(.*)\.(\d+)$/);
+    if (!match) return;
+
+    const parentStr = match[1];
+    let maxIdx = -1;
+
+    currentFlatData.forEach((item) => {
+      if (item.path.startsWith(parentStr + '.')) {
+        const subMatch = item.path.substring(parentStr.length + 1).match(/^(\d+)/);
+        if (subMatch) {
+          const idx = parseInt(subMatch[1], 10);
+          if (idx > maxIdx) maxIdx = idx;
+        }
+      }
+    });
+
+    const newIdx = maxIdx + 1;
+    const itemsToClone = currentFlatData.filter(
+      (i) => i.path === groupPath || i.path.startsWith(groupPath + '.'),
+    );
+
+    const clonedItems = itemsToClone.map((item) => {
+      const suffix = item.path.substring(groupPath.length);
+      return {
+        ...item,
+        path: `${parentStr}.${newIdx}${suffix}`,
+        isEdited: true,
+        selected: false,
+        alts: [],
+      };
+    });
+
+    const newData = [...currentFlatData];
+    let insertPos = newData.length;
+    for (let i = newData.length - 1; i >= 0; i--) {
+      if (newData[i].path.startsWith(parentStr + '.')) {
+        insertPos = i + 1;
+        break;
+      }
+    }
+    newData.splice(insertPos, 0, ...clonedItems);
+    pushHistory(newData);
+    setExpandedGroups((prev) => new Set(prev).add(`${parentStr}.${newIdx}`));
+  };
+
   /**
    * @param {number} index
    * @param {number} height
@@ -361,14 +480,26 @@ export default function JsonManager({ executeSilentTranslation }) {
     });
   }, []);
 
+  const cancelTranslation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsBulkTranslating(false);
+    setTranslatingIndex(-1);
+    setBulkProgress({ current: 0, total: 0 });
+  };
+
   /**
    * @param {number} index
    * @returns {Promise<void>}
    */
   const handleTranslateSingle = async (index) => {
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
     setTranslatingIndex(index);
     try {
-      const result = await executeSilentTranslation(currentFlatData[index].value);
+      const result = await executeSilentTranslation(currentFlatData[index].value, signal);
       if (result && result.text) {
         const newData = [...currentFlatData];
         newData[index] = {
@@ -380,9 +511,11 @@ export default function JsonManager({ executeSilentTranslation }) {
         pushHistory(newData);
       }
     } catch (e) {
-      console.error(e);
+      if (e.name === 'AbortError') console.log('Translation aborted');
+      else console.error(e);
     }
     setTranslatingIndex(-1);
+    abortControllerRef.current = null;
   };
 
   const bulkTranslateSelected = async () => {
@@ -391,12 +524,21 @@ export default function JsonManager({ executeSilentTranslation }) {
       .filter((i) => i !== -1);
     if (selectedIndexes.length === 0) return;
 
-    setIsBulkTranslating(true);
-    const newData = [...currentFlatData];
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-    for (const index of selectedIndexes) {
+    setIsBulkTranslating(true);
+    setBulkProgress({ current: 0, total: selectedIndexes.length });
+
+    let newData = [...currentFlatData];
+
+    for (let i = 0; i < selectedIndexes.length; i++) {
+      if (signal.aborted) break;
+      const index = selectedIndexes[i];
+      setBulkProgress({ current: i + 1, total: selectedIndexes.length });
+
       try {
-        const result = await executeSilentTranslation(newData[index].value);
+        const result = await executeSilentTranslation(newData[index].value, signal);
         if (result && result.text) {
           newData[index] = {
             ...newData[index],
@@ -405,13 +547,20 @@ export default function JsonManager({ executeSilentTranslation }) {
             selected: false,
             alts: result.alts || [],
           };
+          pushHistory([...newData]);
         }
-      } catch {
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          console.log('Bulk translation aborted');
+          break;
+        }
         console.error('Bulk translation failed for index', index);
       }
     }
-    pushHistory(newData);
+
     setIsBulkTranslating(false);
+    setBulkProgress({ current: 0, total: 0 });
+    abortControllerRef.current = null;
   };
 
   /**
@@ -452,7 +601,6 @@ export default function JsonManager({ executeSilentTranslation }) {
       return;
     }
 
-    /** @type {any} */
     let defaultValue = '';
     if (newKeyType === 'number') defaultValue = 0;
     if (newKeyType === 'boolean') defaultValue = false;
@@ -497,34 +645,40 @@ export default function JsonManager({ executeSilentTranslation }) {
     return Array.from(keys).sort();
   }, [currentFlatData]);
 
+  const toggleFilterKey = (key) => {
+    setExcludedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   // Pre-calculate visual layout, heights, and apply filter
   const { visibleRows, totalHeight } = useMemo(() => {
     const rows = [];
     let currentGroup = null;
     let currentTop = 0;
 
-    // Fast mapping to keep original indices safely attached before filtering
+    // Fast mapping to keep original indices
     const mappedData = currentFlatData.map((item, originalIndex) => ({
       ...item,
       originalIndex,
     }));
 
-    // Apply Key Filter
-    const targetData =
-      keyFilter === 'ALL'
-        ? mappedData
-        : mappedData.filter((item) => {
-            const lastDot = item.path.lastIndexOf('.');
-            const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
-            return keyName === keyFilter;
-          });
-
-    // Optimize grouped counting using a map to prevent O(N^2) lag
-    const groupCounts = {};
-    targetData.forEach((item) => {
+    // Conta total de itens por grupo (ignora filtro)
+    const totalGroupCounts = {};
+    mappedData.forEach((item) => {
       const lastDot = item.path.lastIndexOf('.');
       const pPath = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
-      groupCounts[pPath] = (groupCounts[pPath] || 0) + 1;
+      totalGroupCounts[pPath] = (totalGroupCounts[pPath] || 0) + 1;
+    });
+
+    // Aplica Filtros
+    const targetData = mappedData.filter((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
+      return !excludedKeys.has(keyName);
     });
 
     targetData.forEach((item) => {
@@ -538,7 +692,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           isHeader: true,
           id: `header-${parentPath}`,
           groupPath: parentPath,
-          itemCount: groupCounts[parentPath],
+          itemCount: totalGroupCounts[parentPath],
           top: currentTop,
           height: 50,
         });
@@ -565,9 +719,8 @@ export default function JsonManager({ executeSilentTranslation }) {
     });
 
     return { visibleRows: rows, totalHeight: currentTop };
-  }, [currentFlatData, expandedGroups, rowHeights, keyFilter]);
+  }, [currentFlatData, expandedGroups, rowHeights, excludedKeys]);
 
-  // Derive visible items based on scroll
   let startIndex = 0;
   for (let i = 0; i < visibleRows.length; i++) {
     if (visibleRows[i].top + visibleRows[i].height >= scrollTop) {
@@ -644,21 +797,61 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button className="btn btn-sm btn-outline-secondary" onClick={collapseAll}>
             Collapse All
           </button>
-          <div className="d-flex align-items-center ms-2 gap-2">
-            <span className="small text-muted fw-bold">Filter:</span>
-            <select
-              className="form-select form-select-sm border-secondary fw-bold"
-              style={{ maxWidth: '160px' }}
-              value={keyFilter}
-              onChange={(e) => setKeyFilter(e.target.value)}
+
+          {/* Custom Multiple Selection Filter */}
+          <div className="ms-2 position-relative" ref={filterDropdownRef}>
+            <button
+              className="btn btn-sm btn-outline-secondary dropdown-toggle"
+              onClick={() => setFilterOpen(!filterOpen)}
             >
-              <option value="ALL">All Keys</option>
-              {uniqueKeys.map((k) => (
-                <option key={k} value={k}>
-                  {k}
-                </option>
-              ))}
-            </select>
+              Filter Keys{' '}
+              {excludedKeys.size === 0
+                ? '(All)'
+                : `(${uniqueKeys.length - excludedKeys.size}/${uniqueKeys.length})`}
+            </button>
+            {filterOpen && (
+              <div
+                className="dropdown-menu show p-2 shadow"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  zIndex: 1050,
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  minWidth: '200px',
+                }}
+              >
+                <div className="d-flex gap-2 mb-2">
+                  <button
+                    className="btn btn-sm btn-primary flex-grow-1"
+                    onClick={() => setExcludedKeys(new Set())}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline-secondary flex-grow-1"
+                    onClick={() => setExcludedKeys(new Set(uniqueKeys))}
+                  >
+                    Clear All
+                  </button>
+                </div>
+                {uniqueKeys.map((k) => (
+                  <div className="form-check" key={k}>
+                    <input
+                      className="form-check-input"
+                      type="checkbox"
+                      id={`filter-${k}`}
+                      checked={!excludedKeys.has(k)}
+                      onChange={() => toggleFilterKey(k)}
+                    />
+                    <label className="form-check-label small" htmlFor={`filter-${k}`}>
+                      {k}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="d-flex flex-wrap gap-2 align-items-center">
@@ -666,16 +859,37 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button className="btn btn-sm btn-outline-primary" onClick={selectAll}>
             Select All
           </button>
-          <button className="btn btn-sm btn-outline-secondary" onClick={deselectAll}>
-            Deselect
-          </button>
-          <button
-            className="btn btn-sm btn-primary fw-bold"
-            onClick={bulkTranslateSelected}
-            disabled={isTranslatingAny}
-          >
-            {isBulkTranslating ? 'Translating...' : 'Bulk Translate'}
-          </button>
+          <div className="d-flex align-items-center gap-2">
+            <button className="btn btn-sm btn-outline-secondary" onClick={deselectAll}>
+              Deselect
+            </button>
+            {selectedCount > 0 && (
+              <span className="small text-primary fw-bold badge bg-primary-subtle border border-primary-subtle text-primary rounded-pill">
+                {selectedCount} selected
+              </span>
+            )}
+          </div>
+
+          {isTranslatingAny ? (
+            <div className="d-flex align-items-center">
+              <span className="btn btn-sm btn-warning fw-bold pe-none ms-2">
+                {isBulkTranslating
+                  ? `Translating ${bulkProgress.current}/${bulkProgress.total}...`
+                  : 'Translating...'}
+              </span>
+              <button
+                className="btn btn-sm btn-danger fw-bold ms-1"
+                onClick={cancelTranslation}
+                title="Cancel Translation"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-sm btn-primary fw-bold ms-2" onClick={bulkTranslateSelected}>
+              Bulk Translate
+            </button>
+          )}
         </div>
       </div>
 
@@ -690,6 +904,8 @@ export default function JsonManager({ executeSilentTranslation }) {
           {visibleItems.map((item) => {
             if (item.isHeader) {
               const isExpanded = expandedGroups.has(item.groupPath);
+              const isArrayGroup = /\.\d+$/.test(item.groupPath);
+
               return (
                 <div
                   key={item.id}
@@ -705,8 +921,54 @@ export default function JsonManager({ executeSilentTranslation }) {
                   <span className="fw-bold text-primary">
                     <span className="me-2">{isExpanded ? '▼' : '▶'}</span>[{item.groupPath}]
                   </span>
-                  <div className="d-flex align-items-center gap-3">
+                  <div className="d-flex align-items-center gap-2">
                     <span className="badge bg-secondary">{item.itemCount} items</span>
+
+                    <button
+                      className="btn btn-sm btn-outline-primary py-0 px-2 fs-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectGroup(item.groupPath);
+                      }}
+                      title="Select all in this index"
+                    >
+                      ☑
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-secondary py-0 px-2 fs-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deselectGroup(item.groupPath);
+                      }}
+                      title="Deselect all in this index"
+                    >
+                      ☐
+                    </button>
+
+                    {isArrayGroup && (
+                      <>
+                        <button
+                          className="btn btn-sm btn-outline-success border-0 fw-bold fs-6 py-0 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloneGroup(item.groupPath);
+                          }}
+                          title="Duplicate Array Item"
+                        >
+                          ⧉
+                        </button>
+                        <button
+                          className="btn btn-sm btn-outline-danger border-0 fw-bold fs-6 py-0 px-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteGroup(item.groupPath);
+                          }}
+                          title="Delete Array Item"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                     <button
                       className="btn btn-sm btn-outline-primary"
                       onClick={(e) => {
@@ -752,7 +1014,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       {item.isEdited && (
                         <button
                           className="btn btn-link btn-sm p-0 text-decoration-none"
-                          onClick={() => setCompareItem(item)}
+                          onClick={() => setCompareItemIndex(item.originalIndex)}
                         >
                           Compare Original
                         </button>
@@ -915,8 +1177,8 @@ export default function JsonManager({ executeSilentTranslation }) {
         </div>
       )}
 
-      {/* Diff Modal */}
-      {compareItem && (
+      {/* Diff Modal with Live Edit */}
+      {compareItemData && (
         <div
           className="modal show d-block"
           tabIndex="-1"
@@ -925,11 +1187,11 @@ export default function JsonManager({ executeSilentTranslation }) {
           <div className="modal-dialog modal-dialog-centered modal-lg">
             <div className="modal-content bg-body text-body shadow-lg border-0">
               <div className="modal-header bg-body-tertiary">
-                <h5 className="modal-title fw-bold">Comparing: {compareItem.path}</h5>
+                <h5 className="modal-title fw-bold">Comparing: {compareItemData.path}</h5>
                 <button
                   type="button"
                   className="btn-close"
-                  onClick={() => setCompareItem(null)}
+                  onClick={() => setCompareItemIndex(-1)}
                 ></button>
               </div>
               <div className="modal-body row g-3">
@@ -939,16 +1201,29 @@ export default function JsonManager({ executeSilentTranslation }) {
                     className="form-control bg-danger-subtle text-danger"
                     rows="5"
                     readOnly
-                    value={String(compareItem.original)}
+                    value={String(compareItemData.original)}
                   />
                 </div>
                 <div className="col-6">
-                  <label className="form-label fw-bold text-success">Edited Version</label>
+                  <label className="form-label fw-bold text-success">Edited Version (Live)</label>
                   <textarea
-                    className="form-control bg-success-subtle text-success"
+                    className="form-control bg-success-subtle text-success border-success"
                     rows="5"
-                    readOnly
-                    value={String(compareItem.value)}
+                    value={
+                      compareItemData.isString
+                        ? compareItemData.value
+                        : String(compareItemData.value)
+                    }
+                    onChange={(e) => {
+                      let val = e.target.value;
+                      if (!compareItemData.isString) {
+                        if (val === 'true') val = true;
+                        if (val === 'false') val = false;
+                        if (val === 'null') val = null;
+                        if (!isNaN(val) && val !== '') val = Number(val);
+                      }
+                      handleValueChange(compareItemIndex, val);
+                    }}
                   />
                 </div>
               </div>
@@ -956,7 +1231,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  onClick={() => setCompareItem(null)}
+                  onClick={() => setCompareItemIndex(-1)}
                 >
                   Close
                 </button>

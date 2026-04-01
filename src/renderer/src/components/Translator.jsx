@@ -139,9 +139,10 @@ export default function Translator({ apiMode, config }) {
 
   /**
    * @param {string} textToTranslate
+   * @param {AbortSignal} signal
    * @returns {Promise<{text: string, alts: string[]}|null>}
    */
-  const executeSilentTranslation = async (textToTranslate) => {
+  const executeSilentTranslation = async (textToTranslate, signal) => {
     if (!textToTranslate.trim()) return null;
     try {
       if (apiMode === 'libre') {
@@ -155,6 +156,7 @@ export default function Translator({ apiMode, config }) {
             alternatives: 3,
           }),
           headers: { 'Content-Type': 'application/json' },
+          signal,
         });
         const data = await res.json();
         const mainText = data.translatedText || '';
@@ -179,6 +181,7 @@ export default function Translator({ apiMode, config }) {
             max_tokens: 1000,
           }),
           headers: { 'Content-Type': 'application/json' },
+          signal,
         });
         const data = await res.json();
         return {
@@ -187,6 +190,7 @@ export default function Translator({ apiMode, config }) {
         };
       }
     } catch (err) {
+      if (err.name === 'AbortError') throw err;
       console.error(err);
       return null;
     }
@@ -206,11 +210,12 @@ export default function Translator({ apiMode, config }) {
     setIsTranslating(true);
 
     try {
-      const result = await executeSilentTranslation(text);
+      const result = await executeSilentTranslation(text, null);
       setTranslatedText(result?.text || '');
       setTranslationOptions(result?.alts || []);
       setSelectedOptionIndex(0);
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Translation error:', err);
       setTranslatedText('Error: Connection failed. Check your server settings.');
       setTranslationOptions([]);
@@ -378,10 +383,10 @@ export default function Translator({ apiMode, config }) {
         </div>
       </div>
 
-      <div className="row g-3 position-relative flex-grow-1" style={{ minHeight: '60vh' }}>
+      <div className="row g-3 position-relative flex-grow-1 h-100" style={{ minHeight: 0 }}>
         {/* If JSON mode, render full width column, otherwise 50% split */}
         {inputMode === 'json' ? (
-          <div className="col-12 d-flex flex-column">
+          <div className="col-12 d-flex flex-column h-100">
             <div className="card shadow-sm border-0 flex-grow-1 bg-body">
               <div className="card-header bg-body border-0 pt-3 d-flex align-items-center gap-3">
                 <select
