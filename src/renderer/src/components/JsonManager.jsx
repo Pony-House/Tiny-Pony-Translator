@@ -34,10 +34,15 @@ const flattenJson = (obj, prefix = '') => {
 
 /**
  * @param {Array<{path: string, value: any}>} flatArray
- * @returns {Object}
+ * @returns {Object|Array}
  */
 const unflattenJson = (flatArray) => {
-  const result = {};
+  if (!flatArray || flatArray.length === 0) return {};
+
+  // Detects if the root of the file is an Array (e.g., [ { ... } ])
+  const isRootArray = !isNaN(flatArray[0].path.split('.')[0]);
+  const result = isRootArray ? [] : {};
+
   flatArray.forEach(({ path, value }) => {
     const keys = path.split('.');
     let current = result;
@@ -140,6 +145,19 @@ export default function JsonManager({ executeSilentTranslation }) {
   const selectedCount = currentFlatData.filter((i) => i.selected).length;
   const compareItemData = compareItemIndex >= 0 ? currentFlatData[compareItemIndex] : null;
 
+  // Smart Array Items counter
+  const arrayItemsCount = useMemo(() => {
+    const arrayGroups = new Set();
+    currentFlatData.forEach((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const parentPath = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
+      if (parentPath !== 'Root' && /(?:^|\.)\d+$/.test(parentPath)) {
+        arrayGroups.add(parentPath);
+      }
+    });
+    return arrayGroups.size;
+  }, [currentFlatData]);
+
   useEffect(() => {
     if (filePath) sessionStorage.setItem('json_filePath', filePath);
     else sessionStorage.removeItem('json_filePath');
@@ -152,9 +170,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     jsonExcludedKeys = excludedKeys;
   }, [filePath, history, historyIndex, originalFlat, expandedGroups, excludedKeys]);
 
-  /**
-   * Fechar dropdown de filtros ao clicar fora
-   */
+  // Close filter dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
@@ -393,6 +409,7 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const collapseAll = () => setExpandedGroups(new Set());
 
+  // Robust delete that supports Array Items both in objects and directly at the root
   const handleDeleteGroup = (groupPath) => {
     if (!window.confirm(`Are you sure you want to delete the entire array item [${groupPath}]?`))
       return;
@@ -401,17 +418,19 @@ export default function JsonManager({ executeSilentTranslation }) {
       (i) => i.path !== groupPath && !i.path.startsWith(groupPath + '.'),
     );
 
-    const match = groupPath.match(/^(.*)\.(\d+)$/);
+    const match = groupPath.match(/^(?:(.*)\.)?(\d+)$/);
     if (match) {
-      const parentStr = match[1];
+      const parentPrefix = match[1] ? `${match[1]}.` : '';
       const deletedIdx = parseInt(match[2], 10);
+
       newData = newData.map((item) => {
-        if (item.path.startsWith(parentStr + '.')) {
-          const subMatch = item.path.substring(parentStr.length + 1).match(/^(\d+)(.*)$/);
+        if (item.path.startsWith(parentPrefix)) {
+          const remainder = item.path.substring(parentPrefix.length);
+          const subMatch = remainder.match(/^(\d+)(.*)$/);
           if (subMatch) {
             const idx = parseInt(subMatch[1], 10);
             if (idx > deletedIdx) {
-              const newPath = `${parentStr}.${idx - 1}${subMatch[2]}`;
+              const newPath = `${parentPrefix}${idx - 1}${subMatch[2]}`;
               return { ...item, path: newPath };
             }
           }
@@ -422,24 +441,31 @@ export default function JsonManager({ executeSilentTranslation }) {
     pushHistory(newData);
   };
 
+  // Robust clone that shifts subsequent elements and inserts the clone right after the original
   const handleCloneGroup = (groupPath) => {
-    const match = groupPath.match(/^(.*)\.(\d+)$/);
+    const match = groupPath.match(/^(?:(.*)\.)?(\d+)$/);
     if (!match) return;
 
-    const parentStr = match[1];
-    let maxIdx = -1;
+    const parentPrefix = match[1] ? `${match[1]}.` : '';
+    const targetIdx = parseInt(match[2], 10);
+    const newIdx = targetIdx + 1;
 
-    currentFlatData.forEach((item) => {
-      if (item.path.startsWith(parentStr + '.')) {
-        const subMatch = item.path.substring(parentStr.length + 1).match(/^(\d+)/);
+    // Shift elements >= newIdx forward by 1
+    let newData = currentFlatData.map((item) => {
+      if (item.path.startsWith(parentPrefix)) {
+        const remainder = item.path.substring(parentPrefix.length);
+        const subMatch = remainder.match(/^(\d+)(.*)$/);
         if (subMatch) {
           const idx = parseInt(subMatch[1], 10);
-          if (idx > maxIdx) maxIdx = idx;
+          if (idx >= newIdx) {
+            const newPath = `${parentPrefix}${idx + 1}${subMatch[2]}`;
+            return { ...item, path: newPath };
+          }
         }
       }
+      return item;
     });
 
-    const newIdx = maxIdx + 1;
     const itemsToClone = currentFlatData.filter(
       (i) => i.path === groupPath || i.path.startsWith(groupPath + '.'),
     );
@@ -448,24 +474,25 @@ export default function JsonManager({ executeSilentTranslation }) {
       const suffix = item.path.substring(groupPath.length);
       return {
         ...item,
-        path: `${parentStr}.${newIdx}${suffix}`,
+        path: `${parentPrefix}${newIdx}${suffix}`,
         isEdited: true,
         selected: false,
         alts: [],
       };
     });
 
-    const newData = [...currentFlatData];
-    let insertPos = newData.length;
-    for (let i = newData.length - 1; i >= 0; i--) {
-      if (newData[i].path.startsWith(parentStr + '.')) {
+    // Find insertion position immediately after the original target group
+    let insertPos = 0;
+    for (let i = 0; i < newData.length; i++) {
+      const isTarget = newData[i].path === groupPath || newData[i].path.startsWith(groupPath + '.');
+      if (isTarget) {
         insertPos = i + 1;
-        break;
       }
     }
+
     newData.splice(insertPos, 0, ...clonedItems);
     pushHistory(newData);
-    setExpandedGroups((prev) => new Set(prev).add(`${parentStr}.${newIdx}`));
+    setExpandedGroups((prev) => new Set(prev).add(`${parentPrefix}${newIdx}`));
   };
 
   /**
@@ -568,17 +595,18 @@ export default function JsonManager({ executeSilentTranslation }) {
    * @returns {Array<{name: string, type: string}>}
    */
   const getSuggestedKeys = (targetGroup) => {
-    const match = targetGroup.match(/^(.*)\.(\d+)$/);
+    const match = targetGroup.match(/^(?:(.*)\.)?(\d+)$/);
     if (!match) return [];
 
-    const parentArray = match[1];
-    const allArrayItems = currentFlatData.filter((i) => i.path.startsWith(parentArray + '.'));
+    const parentPrefix = match[1] ? `${match[1]}.` : '';
+    const allArrayItems = currentFlatData.filter((i) => i.path.startsWith(parentPrefix));
 
     /** @type {Map<string, string>} */
     const knownKeys = new Map();
 
     allArrayItems.forEach((i) => {
-      const subMatch = i.path.substring(parentArray.length + 1).match(/^\d+\.(.+)$/);
+      const remainder = i.path.substring(parentPrefix.length);
+      const subMatch = remainder.match(/^\d+\.(.+)$/);
       if (subMatch) knownKeys.set(subMatch[1], i.isString ? 'string' : typeof i.value);
     });
 
@@ -666,7 +694,7 @@ export default function JsonManager({ executeSilentTranslation }) {
       originalIndex,
     }));
 
-    // Conta total de itens por grupo (ignora filtro)
+    // Count total items per group (ignores filter)
     const totalGroupCounts = {};
     mappedData.forEach((item) => {
       const lastDot = item.path.lastIndexOf('.');
@@ -674,7 +702,7 @@ export default function JsonManager({ executeSilentTranslation }) {
       totalGroupCounts[pPath] = (totalGroupCounts[pPath] || 0) + 1;
     });
 
-    // Aplica Filtros
+    // Apply Filters
     const targetData = mappedData.filter((item) => {
       const lastDot = item.path.lastIndexOf('.');
       const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
@@ -855,8 +883,14 @@ export default function JsonManager({ executeSilentTranslation }) {
           </div>
         </div>
         <div className="d-flex flex-wrap gap-2 align-items-center">
-          <span className="small text-muted me-2">Items: {currentFlatData.length}</span>
-          <button className="btn btn-sm btn-outline-primary" onClick={selectAll}>
+          <span className="small text-muted me-2 border-end pe-2">
+            Items: {currentFlatData.length}
+          </span>
+          <span className="small text-muted me-2 border-end pe-2">
+            Array Items: {arrayItemsCount}
+          </span>
+
+          <button className="btn btn-sm btn-outline-primary ms-1" onClick={selectAll}>
             Select All
           </button>
           <div className="d-flex align-items-center gap-2">
@@ -904,7 +938,8 @@ export default function JsonManager({ executeSilentTranslation }) {
           {visibleItems.map((item) => {
             if (item.isHeader) {
               const isExpanded = expandedGroups.has(item.groupPath);
-              const isArrayGroup = /\.\d+$/.test(item.groupPath);
+              // Fixed Regex to recognize pure arrays or embedded array items
+              const isArrayGroup = /(?:^|\.)\d+$/.test(item.groupPath);
 
               return (
                 <div
@@ -953,7 +988,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                             e.stopPropagation();
                             handleCloneGroup(item.groupPath);
                           }}
-                          title="Duplicate Array Item"
+                          title="Duplicate Array Item (Create New)"
                         >
                           ⧉
                         </button>
