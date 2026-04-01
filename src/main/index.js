@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import { electronApp, is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
 let mainWindow = null;
@@ -74,10 +74,6 @@ const createWindow = () => {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron');
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window);
-  });
 
   createWindow();
 
