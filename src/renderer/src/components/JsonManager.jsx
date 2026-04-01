@@ -95,6 +95,7 @@ let jsonHistoryIndex = -1;
 let jsonOriginalFlat = [];
 let jsonExpandedGroups = new Set();
 let jsonFilePath = null;
+let jsonKeyFilter = 'ALL';
 
 /**
  * @param {Object} options
@@ -108,6 +109,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [historyIndex, setHistoryIndex] = useState(jsonHistoryIndex);
   const [originalFlat, setOriginalFlat] = useState(jsonOriginalFlat);
   const [expandedGroups, setExpandedGroups] = useState(jsonExpandedGroups);
+  const [keyFilter, setKeyFilter] = useState(jsonKeyFilter);
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
@@ -129,6 +131,9 @@ export default function JsonManager({ executeSilentTranslation }) {
   const currentFlatData = history[historyIndex] || [];
   const isDirty = historyIndex > 0;
 
+  // Lock safety variable
+  const isTranslatingAny = isBulkTranslating || translatingIndex !== -1;
+
   useEffect(() => {
     if (filePath) sessionStorage.setItem('json_filePath', filePath);
     else sessionStorage.removeItem('json_filePath');
@@ -138,7 +143,8 @@ export default function JsonManager({ executeSilentTranslation }) {
     jsonHistoryIndex = historyIndex;
     jsonOriginalFlat = originalFlat;
     jsonExpandedGroups = expandedGroups;
-  }, [filePath, history, historyIndex, originalFlat, expandedGroups]);
+    jsonKeyFilter = keyFilter;
+  }, [filePath, history, historyIndex, originalFlat, expandedGroups, keyFilter]);
 
   /**
    * @param {Array} newData
@@ -173,6 +179,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           setHistoryIndex(0);
           setExpandedGroups(new Set());
           setRowHeights({});
+          setKeyFilter('ALL');
         } catch {
           alert('Invalid JSON file.');
         }
@@ -181,7 +188,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   };
 
   const handleSave = useCallback(async () => {
-    if (!window.api || !filePath) return;
+    if (!window.api || !filePath || isTranslatingAny) return;
     try {
       const reconstructed = unflattenJson(currentFlatData);
       const success = await window.api.saveJson(filePath, JSON.stringify(reconstructed, null, 2));
@@ -198,7 +205,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     } catch {
       alert('Failed to save JSON.');
     }
-  }, [filePath, currentFlatData]);
+  }, [filePath, currentFlatData, isTranslatingAny]);
 
   const handleReset = () => {
     if (
@@ -212,6 +219,7 @@ export default function JsonManager({ executeSilentTranslation }) {
       setOriginalFlat([]);
       setExpandedGroups(new Set());
       setRowHeights({});
+      setKeyFilter('ALL');
     }
   };
 
@@ -241,9 +249,16 @@ export default function JsonManager({ executeSilentTranslation }) {
   };
 
   const selectAll = () => {
-    const newData = currentFlatData.map((item) =>
-      item.isString ? { ...item, selected: true } : item,
-    );
+    const newData = currentFlatData.map((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
+      const matchesFilter = keyFilter === 'ALL' || keyName === keyFilter;
+
+      if (item.isString && matchesFilter) {
+        return { ...item, selected: true };
+      }
+      return item;
+    });
     pushHistory(newData);
   };
 
@@ -282,18 +297,18 @@ export default function JsonManager({ executeSilentTranslation }) {
   };
 
   const undo = useCallback(() => {
-    if (historyIndex > 0) setHistoryIndex(historyIndex - 1);
-  }, [historyIndex]);
+    if (historyIndex > 0 && !isTranslatingAny) setHistoryIndex(historyIndex - 1);
+  }, [historyIndex, isTranslatingAny]);
 
   const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) setHistoryIndex(historyIndex + 1);
-  }, [historyIndex, history.length]);
+    if (historyIndex < history.length - 1 && !isTranslatingAny) setHistoryIndex(historyIndex + 1);
+  }, [historyIndex, history.length, isTranslatingAny]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        if (isDirty) handleSave();
+        if (isDirty && !isTranslatingAny) handleSave();
       } else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         redo();
@@ -307,7 +322,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, handleSave, isDirty]);
+  }, [undo, redo, handleSave, isDirty, isTranslatingAny]);
 
   /**
    * @param {string} groupPath
@@ -471,30 +486,59 @@ export default function JsonManager({ executeSilentTranslation }) {
     setExpandedGroups((prev) => new Set(prev).add(addingKeyToGroup));
   };
 
-  // Pre-calculate visual layout and heights based on expanded states
+  // Generate a list of unique keys for the filter dropdown
+  const uniqueKeys = useMemo(() => {
+    const keys = new Set();
+    currentFlatData.forEach((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
+      keys.add(keyName);
+    });
+    return Array.from(keys).sort();
+  }, [currentFlatData]);
+
+  // Pre-calculate visual layout, heights, and apply filter
   const { visibleRows, totalHeight } = useMemo(() => {
     const rows = [];
     let currentGroup = null;
     let currentTop = 0;
 
-    currentFlatData.forEach((item, originalIndex) => {
+    // Fast mapping to keep original indices safely attached before filtering
+    const mappedData = currentFlatData.map((item, originalIndex) => ({
+      ...item,
+      originalIndex,
+    }));
+
+    // Apply Key Filter
+    const targetData =
+      keyFilter === 'ALL'
+        ? mappedData
+        : mappedData.filter((item) => {
+            const lastDot = item.path.lastIndexOf('.');
+            const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
+            return keyName === keyFilter;
+          });
+
+    // Optimize grouped counting using a map to prevent O(N^2) lag
+    const groupCounts = {};
+    targetData.forEach((item) => {
+      const lastDot = item.path.lastIndexOf('.');
+      const pPath = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
+      groupCounts[pPath] = (groupCounts[pPath] || 0) + 1;
+    });
+
+    targetData.forEach((item) => {
       const lastDot = item.path.lastIndexOf('.');
       const parentPath = lastDot > 0 ? item.path.substring(0, lastDot) : 'Root';
       const keyName = lastDot > 0 ? item.path.substring(lastDot + 1) : item.path;
 
       if (parentPath !== currentGroup) {
         currentGroup = parentPath;
-        const groupItemCount = currentFlatData.filter((i) => {
-          const lDot = i.path.lastIndexOf('.');
-          const pPath = lDot > 0 ? i.path.substring(0, lDot) : 'Root';
-          return pPath === parentPath;
-        }).length;
-
         rows.push({
           isHeader: true,
           id: `header-${parentPath}`,
           groupPath: parentPath,
-          itemCount: groupItemCount,
+          itemCount: groupCounts[parentPath],
           top: currentTop,
           height: 50,
         });
@@ -503,7 +547,7 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       if (expandedGroups.has(parentPath)) {
         const hasAlts = item.alts && item.alts.length > 1;
-        const textAreaHeight = rowHeights[originalIndex] || (item.isString ? 60 : 35);
+        const textAreaHeight = rowHeights[item.originalIndex] || (item.isString ? 60 : 35);
 
         let itemHeight = textAreaHeight + 40;
         if (hasAlts) itemHeight += 45;
@@ -512,7 +556,6 @@ export default function JsonManager({ executeSilentTranslation }) {
           ...item,
           isHeader: false,
           id: `item-${item.path}`,
-          originalIndex,
           keyName,
           top: currentTop,
           height: itemHeight,
@@ -522,7 +565,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     });
 
     return { visibleRows: rows, totalHeight: currentTop };
-  }, [currentFlatData, expandedGroups, rowHeights]);
+  }, [currentFlatData, expandedGroups, rowHeights, keyFilter]);
 
   // Derive visible items based on scroll
   let startIndex = 0;
@@ -564,6 +607,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button
             className="btn btn-sm btn-outline-danger fw-bold"
             onClick={handleReset}
+            disabled={isTranslatingAny}
             title="Reset Editor and Close File"
           >
             ✕ Reset
@@ -571,7 +615,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button
             className="btn btn-sm btn-success fw-bold"
             onClick={handleSave}
-            disabled={!isDirty}
+            disabled={!isDirty || isTranslatingAny}
             title="CTRL + S"
           >
             Save Changes
@@ -580,7 +624,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button
             className="btn btn-sm btn-outline-secondary"
             onClick={undo}
-            disabled={historyIndex <= 0}
+            disabled={historyIndex <= 0 || isTranslatingAny}
             title="CTRL + Z"
           >
             Undo
@@ -588,7 +632,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button
             className="btn btn-sm btn-outline-secondary"
             onClick={redo}
-            disabled={historyIndex >= history.length - 1}
+            disabled={historyIndex >= history.length - 1 || isTranslatingAny}
             title="CTRL + SHIFT + Z"
           >
             Redo
@@ -600,6 +644,22 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button className="btn btn-sm btn-outline-secondary" onClick={collapseAll}>
             Collapse All
           </button>
+          <div className="d-flex align-items-center ms-2 gap-2">
+            <span className="small text-muted fw-bold">Filter:</span>
+            <select
+              className="form-select form-select-sm border-secondary fw-bold"
+              style={{ maxWidth: '160px' }}
+              value={keyFilter}
+              onChange={(e) => setKeyFilter(e.target.value)}
+            >
+              <option value="ALL">All Keys</option>
+              {uniqueKeys.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="d-flex flex-wrap gap-2 align-items-center">
           <span className="small text-muted me-2">Items: {currentFlatData.length}</span>
@@ -612,7 +672,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           <button
             className="btn btn-sm btn-primary fw-bold"
             onClick={bulkTranslateSelected}
-            disabled={isBulkTranslating}
+            disabled={isTranslatingAny}
           >
             {isBulkTranslating ? 'Translating...' : 'Bulk Translate'}
           </button>
@@ -681,7 +741,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       type="checkbox"
                       checked={item.selected}
                       onChange={() => toggleSelection(item.originalIndex)}
-                      disabled={!item.isString}
+                      disabled={!item.isString || isTranslatingAny}
                     />
                   </div>
                   <div className="flex-grow-1 d-flex flex-column" style={{ minWidth: 0 }}>
@@ -721,7 +781,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                         <button
                           className="btn btn-sm btn-primary text-nowrap align-self-start mt-1"
                           onClick={() => handleTranslateSingle(item.originalIndex)}
-                          disabled={translatingIndex === item.originalIndex}
+                          disabled={isTranslatingAny}
                         >
                           {translatingIndex === item.originalIndex ? '...' : 'Translate'}
                         </button>
@@ -750,13 +810,14 @@ export default function JsonManager({ executeSilentTranslation }) {
                     <button
                       className="btn btn-sm btn-outline-secondary mt-1"
                       onClick={() => restoreOriginal(item.originalIndex)}
-                      disabled={!item.isEdited}
+                      disabled={!item.isEdited || isTranslatingAny}
                     >
                       Restore
                     </button>
                     <button
                       className="btn btn-sm btn-outline-danger"
                       onClick={() => removeKey(item.originalIndex)}
+                      disabled={isTranslatingAny}
                     >
                       Remove
                     </button>
