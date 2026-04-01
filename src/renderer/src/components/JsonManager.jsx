@@ -129,12 +129,23 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [expandedGroups, setExpandedGroups] = useState(jsonExpandedGroups);
   const [excludedKeys, setExcludedKeys] = useState(jsonExcludedKeys);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [defaultTextareaHeight, setDefaultTextareaHeight] = useState(60);
+  const [heightsMenuOpen, setHeightsMenuOpen] = useState(false);
+
+  // Load custom heights from localStorage
+  const [defaultTextareaHeight, setDefaultTextareaHeight] = useState(
+    () => parseInt(localStorage.getItem('jsonManager_globalHeight'), 10) || 30,
+  );
+
+  const [customKeyHeights, setCustomKeyHeights] = useState(() => {
+    const saved = localStorage.getItem('jsonManager_customHeights');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
   const containerRef = useRef(null);
   const filterDropdownRef = useRef(null);
+  const heightsDropdownRef = useRef(null);
   const abortControllerRef = useRef(null);
 
   const [isBulkTranslating, setIsBulkTranslating] = useState(false);
@@ -147,6 +158,10 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [addingKeyToGroup, setAddingKeyToGroup] = useState(null);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyType, setNewKeyType] = useState('string');
+
+  // Heights menu state
+  const [newCustomKey, setNewCustomKey] = useState('');
+  const [newCustomHeight, setNewCustomHeight] = useState(100);
 
   /**
    * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean, alts: string[]}>}
@@ -172,6 +187,15 @@ export default function JsonManager({ executeSilentTranslation }) {
     return arrayGroups.size;
   }, [currentFlatData]);
 
+  // Persist heights settings
+  useEffect(() => {
+    localStorage.setItem('jsonManager_globalHeight', defaultTextareaHeight.toString());
+  }, [defaultTextareaHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('jsonManager_customHeights', JSON.stringify(customKeyHeights));
+  }, [customKeyHeights]);
+
   useEffect(() => {
     if (filePath) sessionStorage.setItem('json_filePath', filePath);
     else sessionStorage.removeItem('json_filePath');
@@ -189,6 +213,9 @@ export default function JsonManager({ executeSilentTranslation }) {
     const handleClickOutside = (event) => {
       if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
         setFilterOpen(false);
+      }
+      if (heightsDropdownRef.current && !heightsDropdownRef.current.contains(event.target)) {
+        setHeightsMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -420,6 +447,7 @@ export default function JsonManager({ executeSilentTranslation }) {
         setCompareItemIndex(-1);
         setAddingKeyToGroup(null);
         setFilterOpen(false);
+        setHeightsMenuOpen(false);
       } else if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (isDirty && !isTranslatingAny) handleSave();
@@ -716,6 +744,19 @@ export default function JsonManager({ executeSilentTranslation }) {
     setExpandedGroups((prev) => new Set(prev).add(addingKeyToGroup));
   };
 
+  const addCustomKeyHeight = () => {
+    if (!newCustomKey.trim()) return;
+    setCustomKeyHeights({ ...customKeyHeights, [newCustomKey.trim()]: newCustomHeight });
+    setNewCustomKey('');
+    setNewCustomHeight(100);
+  };
+
+  const removeCustomKeyHeight = (key) => {
+    const updated = { ...customKeyHeights };
+    delete updated[key];
+    setCustomKeyHeights(updated);
+  };
+
   // Generate a list of unique keys for the filter dropdown
   const uniqueKeys = useMemo(() => {
     const keys = new Set();
@@ -783,10 +824,18 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       if (expandedGroups.has(parentPath)) {
         const hasAlts = item.alts && item.alts.length > 1;
-        const textAreaHeight =
-          rowHeights[item.originalIndex] || (item.isString ? defaultTextareaHeight : 35);
 
-        let itemHeight = textAreaHeight + 40;
+        // Determine the target height: custom logic first, then fallback to global default
+        let resolvedDefaultHeight = defaultTextareaHeight;
+        if (item.isString && customKeyHeights[keyName]) {
+          resolvedDefaultHeight = customKeyHeights[keyName];
+        }
+
+        const textAreaHeight =
+          rowHeights[item.originalIndex] || (item.isString ? resolvedDefaultHeight : 35);
+
+        // Increased padding base logic to accommodate buttons vertically better
+        let itemHeight = textAreaHeight + 50;
         if (hasAlts) itemHeight += 45;
 
         rows.push({
@@ -796,13 +845,21 @@ export default function JsonManager({ executeSilentTranslation }) {
           keyName,
           top: currentTop,
           height: itemHeight,
+          resolvedDefaultHeight,
         });
         currentTop += itemHeight;
       }
     });
 
     return { visibleRows: rows, totalHeight: currentTop };
-  }, [currentFlatData, expandedGroups, rowHeights, excludedKeys, defaultTextareaHeight]);
+  }, [
+    currentFlatData,
+    expandedGroups,
+    rowHeights,
+    excludedKeys,
+    defaultTextareaHeight,
+    customKeyHeights,
+  ]);
 
   let startIndex = 0;
   for (let i = 0; i < visibleRows.length; i++) {
@@ -938,15 +995,88 @@ export default function JsonManager({ executeSilentTranslation }) {
             )}
           </div>
 
-          <div className="d-flex align-items-center ms-2 gap-1" title="Default Text Height">
-            <i className="bi bi-textarea-resize text-secondary"></i>
+          {/* Enhanced Height Control System */}
+          <div
+            className="d-flex align-items-center ms-2 gap-1 position-relative"
+            ref={heightsDropdownRef}
+          >
+            <i className="bi bi-textarea-resize text-secondary" title="Global Default Height"></i>
             <input
               type="number"
               className="form-control form-control-sm border-secondary text-center"
               style={{ width: '60px' }}
               value={defaultTextareaHeight}
-              onChange={(e) => setDefaultTextareaHeight(Number(e.target.value) || 60)}
+              onChange={(e) => setDefaultTextareaHeight(Number(e.target.value) || 30)}
             />
+            <button
+              className="btn btn-sm btn-outline-secondary p-1 ms-1"
+              title="Specific Key Heights"
+              onClick={() => setHeightsMenuOpen(!heightsMenuOpen)}
+            >
+              <i className="bi bi-gear"></i>
+            </button>
+
+            {heightsMenuOpen && (
+              <div
+                className="dropdown-menu show p-3 shadow-lg"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  zIndex: 1050,
+                  minWidth: '280px',
+                }}
+              >
+                <h6 className="dropdown-header px-0 text-primary fw-bold">Custom Key Heights</h6>
+                <div className="d-flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Key name..."
+                    value={newCustomKey}
+                    onChange={(e) => setNewCustomKey(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    style={{ width: '70px' }}
+                    value={newCustomHeight}
+                    onChange={(e) => setNewCustomHeight(Number(e.target.value) || 100)}
+                  />
+                  <button className="btn btn-sm btn-success fw-bold" onClick={addCustomKeyHeight}>
+                    +
+                  </button>
+                </div>
+                <div
+                  className="d-flex flex-column gap-2"
+                  style={{ maxHeight: '200px', overflowY: 'auto' }}
+                >
+                  {Object.keys(customKeyHeights).length === 0 ? (
+                    <span className="small text-muted fst-italic">No custom heights active.</span>
+                  ) : (
+                    Object.entries(customKeyHeights).map(([k, h]) => (
+                      <div
+                        key={k}
+                        className="d-flex justify-content-between align-items-center bg-body-secondary p-1 rounded px-2"
+                      >
+                        <span className="small fw-bold text-truncate" style={{ maxWidth: '120px' }}>
+                          {k}
+                        </span>
+                        <div className="d-flex align-items-center gap-2">
+                          <span className="small text-muted">{h}px</span>
+                          <button
+                            className="btn btn-sm btn-link text-danger p-0 m-0"
+                            onClick={() => removeCustomKeyHeight(k)}
+                          >
+                            <i className="bi bi-x-circle-fill"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1102,7 +1232,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                   overflow: 'hidden',
                 }}
               >
-                <div className="d-flex align-items-start w-100">
+                <div className="d-flex align-items-start w-100 py-2">
                   <div className="form-check me-3 mt-1">
                     <input
                       className="form-check-input"
@@ -1131,7 +1261,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       <ResizableTextarea
                         value={item.isString ? item.value : String(item.value)}
                         isString={item.isString}
-                        defaultHeight={defaultTextareaHeight}
+                        defaultHeight={item.resolvedDefaultHeight}
                         onFocus={() => setActiveRowIndex(item.originalIndex)}
                         onBlur={() => setActiveRowIndex(-1)}
                         onHeightChange={(h) => updateRowHeight(item.originalIndex, h)}
@@ -1173,8 +1303,8 @@ export default function JsonManager({ executeSilentTranslation }) {
                     )}
                   </div>
                   <div
-                    className="ms-3 text-end d-flex flex-column gap-1"
-                    style={{ minWidth: '80px' }}
+                    className="ms-3 text-end d-flex flex-column gap-2"
+                    style={{ minWidth: '85px' }}
                   >
                     <button
                       className="btn btn-sm btn-outline-success mt-1"
