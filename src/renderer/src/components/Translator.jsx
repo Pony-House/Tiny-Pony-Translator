@@ -70,6 +70,10 @@ export default function Translator({ apiMode, config }) {
   const [lmHeader, setLmHeader] = useState(() => localStorage.getItem('lmHeader') || '');
 
   const [isTranslating, setIsTranslating] = useState(false);
+
+  // State for AI Prompts Modal
+  const [showPromptsModal, setShowPromptsModal] = useState(false);
+
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -368,18 +372,7 @@ export default function Translator({ apiMode, config }) {
 
   return (
     <>
-      {apiMode === 'openaic' && (
-        <Prompts
-          lmHeader={lmHeader}
-          setLmHeader={setLmHeader}
-          lmInstruction={lmInstruction}
-          setLmInstruction={setLmInstruction}
-          lmAutoInstruction={lmAutoInstruction}
-          setLmAutoInstruction={setLmAutoInstruction}
-        />
-      )}
-
-      <div className="mb-3 d-flex justify-content-center">
+      <div className="mb-3 position-relative d-flex justify-content-center align-items-center">
         <div className="btn-group bg-body shadow-sm rounded">
           <button
             className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
@@ -402,6 +395,17 @@ export default function Translator({ apiMode, config }) {
             Translate JSON
           </button>
         </div>
+
+        {/* Prompt modal open button available only in OpenAiC */}
+        {apiMode === 'openaic' && (
+          <button
+            className="btn btn-sm btn-outline-primary fw-bold position-absolute end-0 shadow-sm"
+            onClick={() => setShowPromptsModal(true)}
+            title="Edit AI Prompts"
+          >
+            <i className="bi bi-robot me-1"></i> AI Prompts
+          </button>
+        )}
       </div>
 
       <div className="row g-3 position-relative flex-grow-1 h-100" style={{ minHeight: 0 }}>
@@ -648,6 +652,49 @@ export default function Translator({ apiMode, config }) {
           ))}
         </div>
       </div>
+
+      {/* Prompts Modal */}
+      {showPromptsModal && (
+        <div
+          className="modal show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1060 }}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-xl">
+            <div className="modal-content bg-body text-body shadow-lg border-0">
+              <div className="modal-header bg-body-tertiary">
+                <h5 className="modal-title fw-bold">
+                  <i className="bi bi-robot me-2"></i>AI Prompts Settings
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowPromptsModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body p-0">
+                <Prompts
+                  lmHeader={lmHeader}
+                  setLmHeader={setLmHeader}
+                  lmInstruction={lmInstruction}
+                  setLmInstruction={setLmInstruction}
+                  lmAutoInstruction={lmAutoInstruction}
+                  setLmAutoInstruction={setLmAutoInstruction}
+                />
+              </div>
+              <div className="modal-footer border-0">
+                <button
+                  type="button"
+                  className="btn btn-primary fw-bold px-4"
+                  onClick={() => setShowPromptsModal(false)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
