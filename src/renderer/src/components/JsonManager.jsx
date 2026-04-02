@@ -59,6 +59,26 @@ const unflattenJson = (flatArray) => {
 };
 
 /**
+ * Responsive Height Calculator Logic
+ * @param {(height: number) => void} setContainerHeight
+ * @param {(height: number) => void} setViewportHeight
+ * @param {import('react').RefObject<null|HTMLElement>} containerRef
+ */
+const updateDimensions = (setContainerHeight, setViewportHeight, containerRef) => {
+  if (containerRef.current) {
+    // Gets the exact pixel distance from the top of the window to the start of our container
+    const rect = containerRef.current.getBoundingClientRect();
+
+    // window.innerHeight is the total screen real estate.
+    // We subtract the space already used (rect.top) and leave a 16px bottom padding margin.
+    const calculatedHeight = Math.max(200, window.innerHeight - rect.top - 16);
+
+    setContainerHeight(calculatedHeight);
+    setViewportHeight(calculatedHeight); // Synchronize virtualization viewport
+  }
+};
+
+/**
  * @param {Object} props
  * @param {string} props.value
  * @param {boolean} props.isString
@@ -210,6 +230,7 @@ export default function JsonManager({ executeSilentTranslation }) {
     jsonOriginalFlat = originalFlat;
     jsonExpandedGroups = expandedGroups;
     jsonExcludedKeys = excludedKeys;
+    updateDimensions(setContainerHeight, setViewportHeight, containerRef);
   }, [filePath, history, historyIndex, originalFlat, expandedGroups, excludedKeys]);
 
   // Close filter dropdown on outside click
@@ -260,6 +281,7 @@ export default function JsonManager({ executeSilentTranslation }) {
           setExpandedGroups(new Set());
           setExcludedKeys(new Set());
           setRowHeights({});
+          updateDimensions(setContainerHeight, setViewportHeight, containerRef);
         } catch {
           alert('Invalid JSON file.');
         }
@@ -884,28 +906,14 @@ export default function JsonManager({ executeSilentTranslation }) {
   const visibleCount = Math.ceil(viewportHeight / 50) + 10;
   const visibleItems = visibleRows.slice(startIndex, startIndex + visibleCount);
 
-  // Responsive Height Calculator Logic
   useEffect(() => {
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        // Gets the exact pixel distance from the top of the window to the start of our container
-        const rect = containerRef.current.getBoundingClientRect();
-
-        // window.innerHeight is the total screen real estate.
-        // We subtract the space already used (rect.top) and leave a 16px bottom padding margin.
-        const calculatedHeight = Math.max(200, window.innerHeight - rect.top - 16);
-
-        setContainerHeight(calculatedHeight);
-        setViewportHeight(calculatedHeight); // Synchronize virtualization viewport
-      }
-    };
-
     // Calculate immediately
-    updateDimensions();
+    const updateDimensionsNow = () =>
+      updateDimensions(setContainerHeight, setViewportHeight, containerRef);
 
     // Recalculate whenever the window is resized
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    window.addEventListener('resize', updateDimensionsNow);
+    return () => window.removeEventListener('resize', updateDimensionsNow);
   }, []);
 
   if (!filePath) {
@@ -1154,15 +1162,13 @@ export default function JsonManager({ executeSilentTranslation }) {
 
       {/* Virtualized Container */}
       <div
+        id="json-editor"
         ref={containerRef}
         className="overflow-auto border rounded bg-body position-relative"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
         style={{ height: `${containerHeight}px` }}
       >
-        <div
-          id="json-editor"
-          style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}
-        >
+        <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
           {visibleItems.map((item) => {
             if (item.isHeader) {
               const isExpanded = expandedGroups.has(item.groupPath);
