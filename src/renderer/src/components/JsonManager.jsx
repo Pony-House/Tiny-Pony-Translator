@@ -71,7 +71,7 @@ const updateDimensions = (setContainerHeight, setViewportHeight, containerRef) =
 
     // window.innerHeight is the total screen real estate.
     // We subtract the space already used (rect.top) and leave a 16px bottom padding margin.
-    const calculatedHeight = Math.max(200, window.innerHeight - rect.top - 16);
+    const calculatedHeight = Math.max(200, window.innerHeight - rect.top - 26);
 
     setContainerHeight(calculatedHeight);
     setViewportHeight(calculatedHeight); // Synchronize virtualization viewport
