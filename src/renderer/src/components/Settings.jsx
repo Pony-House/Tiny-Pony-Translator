@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
+import LibreTranslateManager from './LibreTranslateManager';
 
 /**
  * @typedef {Object} LibreConfig
@@ -37,6 +38,8 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  */
 export default function Settings({ config, setConfig }) {
   const fileInputRef = useRef(null);
+
+  const [isLibreManagerOpen, setIsLibreManagerOpen] = useState(false);
 
   /**
    * @returns {void}
@@ -157,7 +160,9 @@ export default function Settings({ config, setConfig }) {
               </div>
             </div>
             <div className="card-body bg-body flex-grow-1">
-              <h5 className="mb-3">LibreTranslate API</h5>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h5 className="m-0">LibreTranslate API</h5>
+              </div>
               <div className="input-group mb-2">
                 <select
                   className="form-select flex-grow-0"
@@ -180,7 +185,7 @@ export default function Settings({ config, setConfig }) {
                   }
                 />
               </div>
-              <div className="mb-4">
+              <div className="mb-3">
                 <input
                   type="password"
                   className="form-control"
@@ -190,6 +195,14 @@ export default function Settings({ config, setConfig }) {
                     setConfig({ ...config, libre: { ...config.libre, apiKey: e.target.value } })
                   }
                 />
+              </div>
+              <div className="mb-4">
+                <button
+                  className="btn btn-sm btn-primary fw-bold w-100"
+                  onClick={() => setIsLibreManagerOpen(true)}
+                >
+                  <i className="bi bi-hdd-network me-2"></i>Manage Local Instance
+                </button>
               </div>
 
               <h5 className="mb-3">OpenAi Compatible API</h5>
@@ -309,6 +322,11 @@ export default function Settings({ config, setConfig }) {
           </div>
         </div>
       </div>
+
+      <LibreTranslateManager
+        isOpen={isLibreManagerOpen}
+        onClose={() => setIsLibreManagerOpen(false)}
+      />
     </div>
   );
 }

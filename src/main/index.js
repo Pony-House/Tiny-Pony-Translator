@@ -1,12 +1,45 @@
+import { spawn } from 'child_process';
+
 import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
+let ltProcess = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+
+ipcMain.handle('run-libre-command', async (event, action, scriptString) => {
+  return new Promise((resolve) => {
+    // Escreve o script formatado em um arquivo temporário ou roda com bash -c
+    ltProcess = spawn('bash', ['-c', scriptString]);
+
+    ltProcess.stdout.on('data', (data) => {
+      event.sender.send('libre-log', data.toString().trim());
+    });
+
+    ltProcess.stderr.on('data', (data) => {
+      event.sender.send('libre-log', data.toString().trim());
+    });
+
+    ltProcess.on('close', (code) => {
+      event.sender.send('libre-log', `Processo finalizado com código ${code}`);
+      if (action !== 'start') resolve();
+    });
+
+    // Se for start, ele fica rodando, então nós resolvemos imediatamente a promise da interface
+    if (action === 'start') resolve();
+  });
+});
+
+ipcMain.handle('stop-libre-command', () => {
+  if (ltProcess) {
+    ltProcess.kill();
+    ltProcess = null;
+  }
+});
 
 ipcMain.handle('dialog:openJson', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
