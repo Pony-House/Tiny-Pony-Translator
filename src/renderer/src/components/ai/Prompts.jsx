@@ -63,19 +63,7 @@ export default function Prompts({
    * @returns {void}
    */
   const handleModeChange = (e) => {
-    const mode = e.target.value;
-    setPromptMode(mode);
-
-    if (mode === 'standard') {
-      setLmInstruction(DEFAULT_LM_INSTRUCTION);
-      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION);
-    } else if (mode === 'character') {
-      setLmInstruction(DEFAULT_LM_INSTRUCTION_WITH_CHARACTER);
-      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER);
-    } else if (mode === 'orthographic') {
-      setLmInstruction(DEFAULT_LM_INSTRUCTION_ORTH);
-      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_ORTH);
-    }
+    setPromptMode(e.target.value);
   };
 
   /**
@@ -150,6 +138,12 @@ export default function Prompts({
               value={lmHeader}
               onChange={(e) => setLmHeader(e.target.value)}
             />
+            <button
+              className="btn btn-link btn-sm p-0 text-decoration-none align-self-start mt-auto"
+              onClick={() => setLmHeader('')}
+            >
+              ↺ Clear Header
+            </button>
           </div>
         </div>
       </div>

@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import Prompts from '../components/ai/Prompts';
 import JsonManager from './JsonManager';
-import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
+import {
+  DEFAULT_LM_INSTRUCTION,
+  DEFAULT_LM_AUTO_INSTRUCTION,
+  DEFAULT_LM_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_INSTRUCTION_ORTH,
+  DEFAULT_LM_AUTO_INSTRUCTION_ORTH,
+} from '../utils/defaultValues';
 
 /**
  * @typedef {Object} QueueItem
@@ -61,18 +68,61 @@ export default function Translator({ apiMode, config }) {
     return saved ? parseInt(saved, 10) : 0;
   });
 
-  // OpenAi Compatible Specifics
-  const [lmInstruction, setLmInstruction] = useState(
-    () => localStorage.getItem('lmInstruction') || DEFAULT_LM_INSTRUCTION,
-  );
-  const [lmAutoInstruction, setLmAutoInstruction] = useState(
-    () => localStorage.getItem('lmAutoInstruction') || DEFAULT_LM_AUTO_INSTRUCTION,
-  );
-  const [lmHeader, setLmHeader] = useState(() => localStorage.getItem('lmHeader') || '');
-
-  const [promptMode, setPromptMode] = useState(
+  // Mode and Cached Prompts Management
+  const [promptMode, setPromptModeState] = useState(
     () => localStorage.getItem('promptMode') || 'standard',
   );
+
+  /**
+   * @param {string} mode
+   * @returns {string}
+   */
+  const getDefaultInst = (mode) => {
+    if (mode === 'character') return DEFAULT_LM_INSTRUCTION_WITH_CHARACTER;
+    if (mode === 'orthographic') return DEFAULT_LM_INSTRUCTION_ORTH;
+    return DEFAULT_LM_INSTRUCTION;
+  };
+
+  /**
+   * @param {string} mode
+   * @returns {string}
+   */
+  const getDefaultAutoInst = (mode) => {
+    if (mode === 'character') return DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER;
+    if (mode === 'orthographic') return DEFAULT_LM_AUTO_INSTRUCTION_ORTH;
+    return DEFAULT_LM_AUTO_INSTRUCTION;
+  };
+
+  // OpenAi Compatible Specifics
+  const [lmInstruction, setLmInstruction] = useState(
+    () => localStorage.getItem(`lmInstruction_${promptMode}`) || getDefaultInst(promptMode),
+  );
+  const [lmAutoInstruction, setLmAutoInstruction] = useState(
+    () => localStorage.getItem(`lmAutoInstruction_${promptMode}`) || getDefaultAutoInst(promptMode),
+  );
+  const [lmHeader, setLmHeader] = useState(
+    () => localStorage.getItem(`lmHeader_${promptMode}`) || '',
+  );
+
+  /**
+   * Handles switching modes and seamlessly caching the values
+   * @param {string} newMode
+   */
+  const handleSetPromptMode = (newMode) => {
+    // Save current values to local storage before switching
+    localStorage.setItem(`lmInstruction_${promptMode}`, lmInstruction);
+    localStorage.setItem(`lmAutoInstruction_${promptMode}`, lmAutoInstruction);
+    localStorage.setItem(`lmHeader_${promptMode}`, lmHeader);
+    localStorage.setItem('promptMode', newMode);
+
+    // Update state to the new mode and load its cached values
+    setPromptModeState(newMode);
+    setLmInstruction(localStorage.getItem(`lmInstruction_${newMode}`) || getDefaultInst(newMode));
+    setLmAutoInstruction(
+      localStorage.getItem(`lmAutoInstruction_${newMode}`) || getDefaultAutoInst(newMode),
+    );
+    setLmHeader(localStorage.getItem(`lmHeader_${newMode}`) || '');
+  };
 
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -83,6 +133,7 @@ export default function Translator({ apiMode, config }) {
 
   const isOrthographic = apiMode === 'openaic' && promptMode === 'orthographic';
 
+  // Session storage sync
   useEffect(() => {
     sessionStorage.setItem(`${apiMode}_sourceText`, sourceText);
   }, [sourceText, apiMode]);
@@ -96,16 +147,17 @@ export default function Translator({ apiMode, config }) {
     sessionStorage.setItem(`${apiMode}_selectedOptionIndex`, selectedOptionIndex.toString());
   }, [translationOptions, selectedOptionIndex, apiMode]);
 
+  // Local storage config sync
   useEffect(() => {
     localStorage.setItem(`${apiMode}_sourceLang`, sourceLang);
     localStorage.setItem(`${apiMode}_targetLang`, targetLang);
   }, [sourceLang, targetLang, apiMode]);
 
+  // Sync prompts to active mode cache whenever they change
   useEffect(() => {
-    localStorage.setItem('lmInstruction', lmInstruction);
-    localStorage.setItem('lmAutoInstruction', lmAutoInstruction);
-    localStorage.setItem('lmHeader', lmHeader);
-    localStorage.setItem('promptMode', promptMode);
+    localStorage.setItem(`lmInstruction_${promptMode}`, lmInstruction);
+    localStorage.setItem(`lmAutoInstruction_${promptMode}`, lmAutoInstruction);
+    localStorage.setItem(`lmHeader_${promptMode}`, lmHeader);
   }, [lmInstruction, lmAutoInstruction, lmHeader, promptMode]);
 
   /**
@@ -717,7 +769,7 @@ export default function Translator({ apiMode, config }) {
                   lmAutoInstruction={lmAutoInstruction}
                   setLmAutoInstruction={setLmAutoInstruction}
                   promptMode={promptMode}
-                  setPromptMode={setPromptMode}
+                  setPromptMode={handleSetPromptMode}
                 />
               </div>
               <div className="modal-footer border-0">
