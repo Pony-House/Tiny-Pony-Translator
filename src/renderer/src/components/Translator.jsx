@@ -14,6 +14,7 @@ import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/de
  * @param {Object} options
  * @param {string} options.apiMode
  * @param {import('./Settings').SettingsParams} options.config
+ * @returns {JSX.Element}
  */
 export default function Translator({ apiMode, config }) {
   /**
@@ -69,12 +70,18 @@ export default function Translator({ apiMode, config }) {
   );
   const [lmHeader, setLmHeader] = useState(() => localStorage.getItem('lmHeader') || '');
 
+  const [promptMode, setPromptMode] = useState(
+    () => localStorage.getItem('promptMode') || 'standard',
+  );
+
   const [isTranslating, setIsTranslating] = useState(false);
 
   // State for AI Prompts Modal
   const [showPromptsModal, setShowPromptsModal] = useState(false);
 
   const typingTimeoutRef = useRef(null);
+
+  const isOrthographic = apiMode === 'openaic' && promptMode === 'orthographic';
 
   useEffect(() => {
     sessionStorage.setItem(`${apiMode}_sourceText`, sourceText);
@@ -98,7 +105,8 @@ export default function Translator({ apiMode, config }) {
     localStorage.setItem('lmInstruction', lmInstruction);
     localStorage.setItem('lmAutoInstruction', lmAutoInstruction);
     localStorage.setItem('lmHeader', lmHeader);
-  }, [lmInstruction, lmAutoInstruction, lmHeader]);
+    localStorage.setItem('promptMode', promptMode);
+  }, [lmInstruction, lmAutoInstruction, lmHeader, promptMode]);
 
   /**
    * @type {function}
@@ -174,10 +182,19 @@ export default function Translator({ apiMode, config }) {
           alts: mainText ? [mainText, ...alts] : [],
         };
       } else {
-        const systemPrompt =
-          sourceLang === 'auto'
-            ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`
-            : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`;
+        let systemPrompt = '';
+
+        if (isOrthographic) {
+          systemPrompt =
+            sourceLang === 'auto'
+              ? `${lmAutoInstruction}\n\n${lmHeader}`.trim()
+              : `${lmInstruction}\n\n${lmHeader}\n\nLanguage: ${sourceLang}.`.trim();
+        } else {
+          systemPrompt =
+            sourceLang === 'auto'
+              ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`.trim()
+              : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`.trim();
+        }
 
         const headers = { 'Content-Type': 'application/json' };
         if (config.openaic.apiKey) {
@@ -413,7 +430,7 @@ export default function Translator({ apiMode, config }) {
         {inputMode === 'json' ? (
           <div className="col-12 d-flex flex-column h-100">
             <div className="card shadow-sm border-0 flex-grow-1 bg-body">
-              <div className="card-header bg-body border-0 pt-3 d-flex align-items-center gap-3">
+              <div className="card-header bg-body border-0 pt-3 d-flex align-items-center gap-3 flex-wrap">
                 <select
                   className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
                   disabled={isLibreEmpty}
@@ -432,28 +449,38 @@ export default function Translator({ apiMode, config }) {
                 </select>
 
                 <span className="text-muted fw-bold">
-                  <i className="bi bi-arrow-left-right"></i>
+                  {isOrthographic ? (
+                    <i className="bi bi-arrow-right"></i>
+                  ) : (
+                    <i className="bi bi-arrow-left-right"></i>
+                  )}
                 </span>
 
-                <select
-                  className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
-                  disabled={isLibreEmpty}
-                  value={targetLang}
-                  onChange={(e) => setTargetLang(e.target.value)}
-                >
-                  {isLibreEmpty ? (
-                    <option>Empty</option>
-                  ) : (
-                    targetLanguagesList.map((l) => (
-                      <option key={l.code} value={l.code}>
-                        {l.name}
-                      </option>
-                    ))
-                  )}
-                </select>
+                {!isOrthographic ? (
+                  <select
+                    className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
+                    disabled={isLibreEmpty}
+                    value={targetLang}
+                    onChange={(e) => setTargetLang(e.target.value)}
+                  >
+                    {isLibreEmpty ? (
+                      <option>Empty</option>
+                    ) : (
+                      targetLanguagesList.map((l) => (
+                        <option key={l.code} value={l.code}>
+                          {l.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                ) : (
+                  <span className="badge bg-warning-subtle border border-warning-subtle text-warning-emphasis rounded-pill shadow-sm py-2 px-3">
+                    <i className="bi bi-spellcheck me-1"></i>Spell Checker Mode
+                  </span>
+                )}
 
                 <button
-                  className="btn btn-sm btn-outline-secondary"
+                  className="btn btn-sm btn-outline-secondary ms-auto"
                   onClick={handleRefreshLanguages}
                   title="Refresh Languages"
                 >
@@ -499,7 +526,9 @@ export default function Translator({ apiMode, config }) {
                     <textarea
                       className="form-control border-0 fs-4 flex-grow-1 bg-body text-body"
                       style={{ resize: 'none', boxShadow: 'none' }}
-                      placeholder="Type to translate..."
+                      placeholder={
+                        isOrthographic ? 'Type text to check spelling...' : 'Type to translate...'
+                      }
                       disabled={isLibreEmpty}
                       value={sourceText}
                       onChange={(e) => handleSourceChange(e.target.value)}
@@ -523,7 +552,7 @@ export default function Translator({ apiMode, config }) {
               </div>
             </div>
 
-            {inputMode === 'text' && (
+            {inputMode === 'text' && !isOrthographic && (
               <div
                 className="position-absolute top-50 start-50 translate-middle"
                 style={{ width: 'auto', zIndex: 10 }}
@@ -546,30 +575,37 @@ export default function Translator({ apiMode, config }) {
 
             <div className="col-md-6 d-flex flex-column">
               <div className="card shadow-sm border-0 flex-grow-1 bg-body">
-                <div className="card-header bg-body border-0 pt-3 d-flex justify-content-between">
-                  <select
-                    className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
-                    disabled={isLibreEmpty}
-                    value={targetLang}
-                    onChange={(e) => setTargetLang(e.target.value)}
-                  >
-                    {isLibreEmpty ? (
-                      <option>Empty</option>
-                    ) : (
-                      targetLanguagesList.map((l) => (
-                        <option key={l.code} value={l.code}>
-                          {l.name}
-                        </option>
-                      ))
-                    )}
-                  </select>
+                <div className="card-header bg-body border-0 pt-3 d-flex justify-content-between align-items-center">
+                  {!isOrthographic ? (
+                    <select
+                      className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
+                      disabled={isLibreEmpty}
+                      value={targetLang}
+                      onChange={(e) => setTargetLang(e.target.value)}
+                    >
+                      {isLibreEmpty ? (
+                        <option>Empty</option>
+                      ) : (
+                        targetLanguagesList.map((l) => (
+                          <option key={l.code} value={l.code}>
+                            {l.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  ) : (
+                    <span className="fw-bold text-warning fs-5 w-100 d-flex align-items-center">
+                      <i className="bi bi-spellcheck me-2"></i>Corrected Text
+                    </span>
+                  )}
+
                   {apiMode === 'openaic' && inputMode === 'text' && (
                     <button
-                      className="btn btn-primary fw-bold px-4 ms-2"
+                      className={`btn ${isOrthographic ? 'btn-warning text-dark' : 'btn-primary'} fw-bold px-4 ms-2 text-nowrap`}
                       disabled={isTranslating || isLibreEmpty}
                       onClick={() => executeTranslation(sourceText)}
                     >
-                      {isTranslating ? '...' : 'Translate'}
+                      {isTranslating ? '...' : isOrthographic ? 'Check Spelling' : 'Translate'}
                     </button>
                   )}
                 </div>
@@ -577,7 +613,7 @@ export default function Translator({ apiMode, config }) {
                   {inputMode === 'text' ? (
                     <>
                       <textarea
-                        className="form-control border-0 fs-4 bg-body text-body flex-grow-1 pb-4"
+                        className={`form-control border-0 fs-4 bg-body text-body flex-grow-1 pb-4 ${isOrthographic && translatedText ? 'text-warning-emphasis' : ''}`}
                         style={{ resize: 'none', boxShadow: 'none' }}
                         readOnly
                         value={translatedText}
@@ -680,6 +716,8 @@ export default function Translator({ apiMode, config }) {
                   setLmInstruction={setLmInstruction}
                   lmAutoInstruction={lmAutoInstruction}
                   setLmAutoInstruction={setLmAutoInstruction}
+                  promptMode={promptMode}
+                  setPromptMode={setPromptMode}
                 />
               </div>
               <div className="modal-footer border-0">

@@ -1,5 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../../utils/defaultValues';
+import {
+  DEFAULT_LM_INSTRUCTION,
+  DEFAULT_LM_AUTO_INSTRUCTION,
+  DEFAULT_LM_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_INSTRUCTION_ORTH,
+  DEFAULT_LM_AUTO_INSTRUCTION_ORTH,
+} from '../../utils/defaultValues';
 
 /**
  * @param {Object} props
@@ -37,6 +44,8 @@ const AutoResizeTextarea = ({ value, onChange, placeholder }) => {
  * @param {(ops: string) => void} options.setLmAutoInstruction
  * @param {string} options.lmHeader
  * @param {(ops: string) => void} options.setLmHeader
+ * @param {string} options.promptMode
+ * @param {(mode: string) => void} options.setPromptMode
  * @returns {JSX.Element}
  */
 export default function Prompts({
@@ -46,10 +55,65 @@ export default function Prompts({
   setLmAutoInstruction,
   lmHeader,
   setLmHeader,
+  promptMode,
+  setPromptMode,
 }) {
+  /**
+   * @param {import('react').ChangeEvent<HTMLSelectElement>} e
+   * @returns {void}
+   */
+  const handleModeChange = (e) => {
+    const mode = e.target.value;
+    setPromptMode(mode);
+
+    if (mode === 'standard') {
+      setLmInstruction(DEFAULT_LM_INSTRUCTION);
+      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION);
+    } else if (mode === 'character') {
+      setLmInstruction(DEFAULT_LM_INSTRUCTION_WITH_CHARACTER);
+      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER);
+    } else if (mode === 'orthographic') {
+      setLmInstruction(DEFAULT_LM_INSTRUCTION_ORTH);
+      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_ORTH);
+    }
+  };
+
+  /**
+   * @returns {void}
+   */
+  const handleResetStandard = () => {
+    if (promptMode === 'standard') setLmInstruction(DEFAULT_LM_INSTRUCTION);
+    else if (promptMode === 'character') setLmInstruction(DEFAULT_LM_INSTRUCTION_WITH_CHARACTER);
+    else if (promptMode === 'orthographic') setLmInstruction(DEFAULT_LM_INSTRUCTION_ORTH);
+  };
+
+  /**
+   * @returns {void}
+   */
+  const handleResetAuto = () => {
+    if (promptMode === 'standard') setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION);
+    else if (promptMode === 'character')
+      setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER);
+    else if (promptMode === 'orthographic') setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION_ORTH);
+  };
+
   return (
     <div className="card mb-4 shadow-sm border-0">
-      <div className="card-body bg-body rounded">
+      <div className="card-header bg-body-tertiary d-flex justify-content-between align-items-center py-2">
+        <span className="fw-bold small text-uppercase text-secondary">
+          <i className="bi bi-robot me-2"></i>Prompt Template Configuration
+        </span>
+        <select
+          className="form-select form-select-sm w-auto fw-bold text-primary shadow-sm"
+          value={promptMode}
+          onChange={handleModeChange}
+        >
+          <option value="standard">Standard Translation</option>
+          <option value="character">Character & Personality Translator</option>
+          <option value="orthographic">Orthographic Corrector</option>
+        </select>
+      </div>
+      <div className="card-body bg-body rounded-bottom">
         <div className="row g-3">
           <div className="col-md-4 d-flex flex-column">
             <label className="form-label fw-bold small text-uppercase">System Prompt</label>
@@ -59,9 +123,9 @@ export default function Prompts({
             />
             <button
               className="btn btn-link btn-sm p-0 text-decoration-none align-self-start mt-auto"
-              onClick={() => setLmInstruction(DEFAULT_LM_INSTRUCTION)}
+              onClick={handleResetStandard}
             >
-              ↺ Reset Standard
+              ↺ Reset Template
             </button>
           </div>
           <div className="col-md-4 d-flex flex-column">
@@ -72,7 +136,7 @@ export default function Prompts({
             />
             <button
               className="btn btn-link btn-sm p-0 text-decoration-none align-self-start mt-auto"
-              onClick={() => setLmAutoInstruction(DEFAULT_LM_AUTO_INSTRUCTION)}
+              onClick={handleResetAuto}
             >
               ↺ Reset Auto
             </button>
