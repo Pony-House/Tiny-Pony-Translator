@@ -143,7 +143,11 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(600);
+
+  // Custom height logic for the outer scroll container
+  const [containerHeight, setContainerHeight] = useState(600);
   const containerRef = useRef(null);
+
   const filterDropdownRef = useRef(null);
   const heightsDropdownRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -880,18 +884,33 @@ export default function JsonManager({ executeSilentTranslation }) {
   const visibleCount = Math.ceil(viewportHeight / 50) + 10;
   const visibleItems = visibleRows.slice(startIndex, startIndex + visibleCount);
 
+  // Responsive Height Calculator Logic
   useEffect(() => {
-    if (containerRef.current) setViewportHeight(containerRef.current.clientHeight);
-    const handleResize = () => {
-      if (containerRef.current) setViewportHeight(containerRef.current.clientHeight);
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        // Gets the exact pixel distance from the top of the window to the start of our container
+        const rect = containerRef.current.getBoundingClientRect();
+
+        // window.innerHeight is the total screen real estate.
+        // We subtract the space already used (rect.top) and leave a 16px bottom padding margin.
+        const calculatedHeight = Math.max(200, window.innerHeight - rect.top - 16);
+
+        setContainerHeight(calculatedHeight);
+        setViewportHeight(calculatedHeight); // Synchronize virtualization viewport
+      }
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    // Calculate immediately
+    updateDimensions();
+
+    // Recalculate whenever the window is resized
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
   if (!filePath) {
     return (
-      <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-body py-5">
+      <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-body py-5 flex-grow-1">
         <h4 className="text-secondary mb-3">No JSON File Loaded</h4>
         <button className="btn btn-primary px-4 fw-bold shadow-sm" onClick={handleOpen}>
           Open JSON File
@@ -901,7 +920,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   }
 
   return (
-    <div className="d-flex flex-column h-100 bg-body p-3 w-100 overflow-hidden">
+    <div className="d-flex flex-column h-100 bg-body p-3 w-100 overflow-hidden flex-grow-1">
       {/* Editor Toolbar */}
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-body-tertiary p-2 rounded border gap-2 flex-shrink-0">
         <div className="d-flex flex-wrap gap-2 align-items-center">
@@ -1138,9 +1157,12 @@ export default function JsonManager({ executeSilentTranslation }) {
         ref={containerRef}
         className="overflow-auto border rounded bg-body position-relative"
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        style={{ height: '70vh' }}
+        style={{ height: `${containerHeight}px` }}
       >
-        <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
+        <div
+          id="json-editor"
+          style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}
+        >
           {visibleItems.map((item) => {
             if (item.isHeader) {
               const isExpanded = expandedGroups.has(item.groupPath);
