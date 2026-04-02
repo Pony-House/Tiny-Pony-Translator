@@ -6,38 +6,64 @@ import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import icon from '../../resources/icon.png?asset';
 
-let ltProcess = null;
+const activeProcesses = new Map();
+
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 
-ipcMain.handle('run-libre-command', async (event, action, scriptString) => {
+// Checks if the process exists and is not killed
+ipcMain.handle('get-libre-server-status', (event, sessionId) => {
+  const cp = activeProcesses.get(sessionId);
+  return {
+    isRunning: cp !== undefined && !cp.killed,
+  };
+});
+
+ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionId) => {
   return new Promise((resolve) => {
-    // Escreve o script formatado em um arquivo temporário ou roda com bash -c
-    ltProcess = spawn('bash', ['-c', scriptString]);
+    const cp = spawn('bash', ['-c', scriptString], { detached: true });
 
-    ltProcess.stdout.on('data', (data) => {
+    activeProcesses.set(sessionId, cp);
+
+    cp.stdout.on('data', (data) => {
       event.sender.send('libre-log', data.toString().trim());
     });
 
-    ltProcess.stderr.on('data', (data) => {
+    cp.stderr.on('data', (data) => {
       event.sender.send('libre-log', data.toString().trim());
     });
 
-    ltProcess.on('close', (code) => {
-      event.sender.send('libre-log', `Processo finalizado com código ${code}`);
-      if (action !== 'start') resolve();
+    cp.on('close', (code) => {
+      event.sender.send('libre-log', `Process [${sessionId}] finished with code ${code}`);
+      activeProcesses.delete(sessionId);
+      if (action !== 'start') {
+        resolve();
+      }
     });
 
-    // Se for start, ele fica rodando, então nós resolvemos imediatamente a promise da interface
-    if (action === 'start') resolve();
+    // Resolve immediately for the interface to know it is running
+    if (action === 'start') {
+      resolve();
+    }
   });
 });
 
-ipcMain.handle('stop-libre-command', () => {
-  if (ltProcess) {
-    ltProcess.kill();
-    ltProcess = null;
+ipcMain.handle('stop-libre-command', (event, sessionId) => {
+  const cp = activeProcesses.get(sessionId);
+  if (cp) {
+    try {
+      process.kill(-cp.pid);
+    } catch (err) {
+      console.error(err);
+      // Fallback safe in case the group is already dead or something strange happens
+      try {
+        cp.kill('SIGKILL');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    activeProcesses.delete(sessionId);
   }
 });
 

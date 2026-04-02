@@ -8,14 +8,17 @@ const api = {
   /**
    * @param {string} action
    * @param {string} script
+   * @param {string} sessionId
    * @returns {Promise<void>}
    */
-  runLibreCommand: (action, script) => ipcRenderer.invoke('run-libre-command', action, script),
+  runLibreCommand: (action, script, sessionId) =>
+    ipcRenderer.invoke('run-libre-command', action, script, sessionId),
 
   /**
+   * @param {string} sessionId
    * @returns {Promise<void>}
    */
-  stopLibreCommand: () => ipcRenderer.invoke('stop-libre-command'),
+  stopLibreCommand: (sessionId) => ipcRenderer.invoke('stop-libre-command', sessionId),
 
   /**
    * @param {function} callback
@@ -28,6 +31,11 @@ const api = {
     // Returns a cleanup function to remove the listener when the component unmounts
     return () => ipcRenderer.removeListener('libre-log', listener);
   },
+  /**
+   * @param {string} sessionId
+   * @returns {Promise<{isRunning: boolean}>}
+   */
+  getLibreServerStatus: (sessionId) => ipcRenderer.invoke('get-libre-server-status', sessionId),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

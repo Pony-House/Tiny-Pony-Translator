@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import Ansi from 'ansi-to-react';
 
 /**
- * @param {Object} props
- * @param {boolean} props.isOpen
- * @param {() => void} props.onClose
- * @returns {JSX.Element|null}
+ * Component to manage the local installation and execution of LibreTranslate.
+ * @param {Object} props - Component properties.
+ * @param {boolean} props.isOpen - Determines if the manager modal is visible.
+ * @param {() => void} props.onClose - Callback function triggered to close the modal.
+ * @returns {JSX.Element|null} The modal element or null if closed.
  */
 export default function LibreTranslateManager({ isOpen, onClose }) {
-  // Configurações do Servidor e Ambiente
+  // Server and Environment Configuration
   const [installPath, setInstallPath] = useState(
     () => localStorage.getItem('lt_installPath') || `~/libretranslate-env`,
   );
@@ -20,13 +21,17 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   const [isPublic, setIsPublic] = useState(() => localStorage.getItem('lt_isPublic') === 'true');
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('lt_apiKey') || '');
 
-  // Estado do Processo e Logs
+  // Process State and Logs
   const [isRunning, setIsRunning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [logs, setLogs] = useState([]);
   const logsEndRef = useRef(null);
 
-  // Salva configurações no cache
+  // Constants for Session IDs to prevent ghost instances
+  const SERVER_SESSION_ID = 'libre-server';
+  const TASK_SESSION_ID = 'libre-task';
+
+  // Save configurations to local cache
   useEffect(() => {
     localStorage.setItem('lt_installPath', installPath);
     localStorage.setItem('lt_pythonPath', pythonPath);
@@ -36,25 +41,40 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     localStorage.setItem('lt_apiKey', apiKey);
   }, [installPath, pythonPath, languages, port, isPublic, apiKey]);
 
-  // Auto-scroll nos logs
+  // Auto-scroll the logs container
   useEffect(() => {
     if (logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [logs]);
 
-  // Listener para capturar logs do backend (Main Process)
+  // Check backend server status when the modal is opened
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (isOpen && window.api && window.api.getLibreServerStatus) {
+        const status = await window.api.getLibreServerStatus(SERVER_SESSION_ID);
+        setIsRunning(status.isRunning);
+
+        // Also checks if there is any installation running in background
+        const taskStatus = await window.api.getLibreServerStatus(TASK_SESSION_ID);
+        setIsProcessing(taskStatus.isRunning);
+      }
+    };
+    checkStatus();
+  }, [isOpen]);
+
+  // Listener to capture logs from the backend (Main Process)
   useEffect(() => {
     if (window.api && window.api.onLibreTranslateLog) {
       const removeListener = window.api.onLibreTranslateLog((message) => {
         setLogs((prev) => {
-          // Lida com caracteres de retorno de carro (\r) que as barras de progresso do Python usam
+          // Handles carriage return (\r) characters used by Python progress bars
           const lines = message.split('\n');
           let newLogs = [...prev];
 
           lines.forEach((line) => {
             if (line.includes('\r')) {
-              // Substitui a última linha se houver um \r (típico de barras de progresso de download)
+              // Replaces the last line if \r is present (typical of download progress bars)
               const parts = line.split('\r');
               const finalPart = parts[parts.length - 1];
               if (finalPart.trim()) {
@@ -69,7 +89,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
             }
           });
 
-          // Limita rigorosamente a 500 logs para não estourar a memória do React
+          // Strictly limits to 500 logs to prevent React memory issues
           return newLogs.length > 500 ? newLogs.slice(newLogs.length - 500) : newLogs;
         });
       });
@@ -80,38 +100,38 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   /**
-   * Envia comandos formatados para o backend do Electron executar no shell
-   * @param {string} action 'install' | 'update' | 'start' | 'stop' | 'cancel'
+   * Sends formatted commands for the Electron backend to execute in the shell.
+   * @param {string} action - The action to perform ('install', 'update', 'start', 'stop', 'cancel').
+   * @returns {Promise<void>}
    */
   const handleCommand = async (action) => {
     if (!window.api || !window.api.runLibreCommand) {
       addLocalLog(
-        '\x1b[31mERROR: API do Electron não encontrada. Implemente window.api.runLibreCommand no main.js\x1b[0m',
+        '\x1b[31mERROR: Electron API not found. Implement window.api.runLibreCommand in main.js\x1b[0m',
       );
       return;
     }
 
     if (action === 'cancel') {
-      addLocalLog('\x1b[33mCancelando operação em andamento...\x1b[0m');
-      await window.api.stopLibreCommand();
+      addLocalLog('\x1b[33mCanceling current operation...\x1b[0m');
+      await window.api.stopLibreCommand(TASK_SESSION_ID);
       setIsProcessing(false);
       return;
     }
 
     if (action === 'stop') {
-      addLocalLog('\x1b[33mEnviando sinal de parada para o servidor...\x1b[0m');
-      await window.api.stopLibreCommand();
+      addLocalLog('\x1b[33mSending stop signal to the server...\x1b[0m');
+      await window.api.stopLibreCommand(SERVER_SESSION_ID);
       setIsRunning(false);
-      setIsProcessing(false);
       return;
     }
 
     const loadOnlyEnv = languages.trim() ? ` --load-only ${languages.trim()}` : '';
     let script = '';
 
-    // Link creator (Part 1)
+    // Link creator script (Part 1)
     let linkCreator = `
-      # Força o Python a cuspir os logs em tempo real (desliga o buffer)
+      # Forces Python to output logs in real-time (disables buffering)
       export PYTHONUNBUFFERED=1
 
       # Define source and target paths
@@ -136,9 +156,12 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           exit 1
     `;
 
+    // Determine which session ID to use for process tracking
+    const sessionId = action === 'start' ? SERVER_SESSION_ID : TASK_SESSION_ID;
+
     if (action === 'install') {
       setIsProcessing(true);
-      addLocalLog('\x1b[36mIniciando processo de instalação...\x1b[0m');
+      addLocalLog('\x1b[36mStarting installation process...\x1b[0m');
 
       // Link creator (Part 2)
       linkCreator += `
@@ -159,7 +182,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       `;
     } else if (action === 'update') {
       setIsProcessing(true);
-      addLocalLog('\x1b[36mIniciando processo de atualização...\x1b[0m');
+      addLocalLog('\x1b[36mStarting update process...\x1b[0m');
 
       // Link creator (Part 2)
       linkCreator += `
@@ -174,8 +197,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
         libretranslate --update-models ${loadOnlyEnv}
       `;
     } else if (action === 'start') {
-      setIsProcessing(true);
-      addLocalLog('\x1b[36mIniciando instância do LibreTranslate...\x1b[0m');
+      addLocalLog('\x1b[36mStarting LibreTranslate instance...\x1b[0m');
       const host = isPublic ? '0.0.0.0' : '127.0.0.1';
       const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
 
@@ -192,20 +214,25 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     }
 
     try {
-      // O backend deve retornar quando o script terminar (para install/update)
-      // Para 'start', ele vai rodar em background e disparar os logs.
-      await window.api.runLibreCommand(action, script);
+      // The backend should return when the script finishes (for install/update)
+      // For 'start', it runs in the background and resolves immediately.
+      await window.api.runLibreCommand(action, script, sessionId);
 
       if (action === 'start') {
         setIsRunning(true);
       }
     } catch (err) {
-      addLocalLog(`\x1b[31mERRO FATAL: ${err.message}\x1b[0m`);
+      addLocalLog(`\x1b[31mFATAL ERROR: ${err.message}\x1b[0m`);
     } finally {
       if (action !== 'start') setIsProcessing(false);
     }
   };
 
+  /**
+   * Appends a local message to the logs.
+   * @param {string} msg - The message to add.
+   * @returns {void}
+   */
   const addLocalLog = (msg) => {
     setLogs((prev) => {
       const next = [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`];
@@ -213,6 +240,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     });
   };
 
+  /**
+   * Clears all current logs.
+   * @returns {void}
+   */
   const clearLogs = () => setLogs([]);
 
   return (
@@ -221,9 +252,13 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       tabIndex="-1"
       style={{ backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060 }}
     >
-      <div className="modal-dialog modal-dialog-centered modal-xl">
-        <div className="modal-content bg-body text-body shadow-lg border-0">
-          <div className="modal-header bg-body-tertiary border-bottom-0">
+      <div className="modal-dialog modal-dialog-centered modal-xl h-100 my-0 py-4">
+        {/* Responsive adjustments: h-100 and d-flex column on the modal content */}
+        <div
+          className="modal-content bg-body text-body shadow-lg border-0 d-flex flex-column"
+          style={{ height: 'calc(100vh - 4rem)' }}
+        >
+          <div className="modal-header bg-body-tertiary border-bottom-0 flex-shrink-0">
             <h5 className="modal-title fw-bold text-primary">
               <i className="bi bi-translate me-2"></i>Local LibreTranslate Manager
             </h5>
@@ -235,11 +270,11 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
             ></button>
           </div>
 
-          <div className="modal-body p-4 pt-2">
-            <div className="row g-4">
-              {/* Coluna Esquerda: Configurações */}
-              <div className="col-md-5 d-flex flex-column gap-3">
-                <div className="card shadow-sm border-0 bg-body-tertiary">
+          <div className="modal-body p-4 pt-2 d-flex flex-column flex-grow-1 overflow-hidden">
+            <div className="row g-4 h-100">
+              {/* Left Column: Configurations */}
+              <div className="col-md-5 d-flex flex-column gap-3 h-100 overflow-auto pe-2">
+                <div className="card shadow-sm border-0 bg-body-tertiary flex-shrink-0">
                   <div className="card-body">
                     <h6 className="fw-bold mb-3 text-secondary border-bottom pb-2">
                       Environment Setup
@@ -287,7 +322,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                   </div>
                 </div>
 
-                <div className="card shadow-sm border-0 bg-body-tertiary">
+                <div className="card shadow-sm border-0 bg-body-tertiary flex-shrink-0">
                   <div className="card-body">
                     <h6 className="fw-bold mb-3 text-secondary border-bottom pb-2">
                       Server Configuration
@@ -335,8 +370,8 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                   </div>
                 </div>
 
-                {/* Botões de Ação */}
-                <div className="d-flex flex-wrap gap-2 mt-2">
+                {/* Action Buttons */}
+                <div className="d-flex flex-wrap gap-2 mt-auto pb-2 flex-shrink-0">
                   <button
                     className="btn btn-primary fw-bold flex-grow-1 shadow-sm"
                     onClick={() => handleCommand('install')}
@@ -352,7 +387,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                     <i className="bi bi-arrow-clockwise me-1"></i>Update
                   </button>
 
-                  {/* Se estiver processando (instalando/atualizando), exibe o Cancel */}
+                  {/* If you are processing (installing/updating), display Cancel */}
                   {isProcessing && !isRunning && (
                     <button
                       className="btn btn-warning fw-bold w-100 shadow-sm mt-2 text-dark"
@@ -362,7 +397,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                     </button>
                   )}
 
-                  {/* Se o servidor estiver rodando, exibe o Stop */}
+                  {/* If the server is running, show Stop */}
                   {isRunning && (
                     <button
                       className="btn btn-danger fw-bold w-100 shadow-sm mt-2"
@@ -372,7 +407,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                     </button>
                   )}
 
-                  {/* Se não estiver rodando e nem processando, exibe o Start */}
+                  {/* If you are not running or processing, display Start */}
                   {!isRunning && !isProcessing && (
                     <button
                       className="btn btn-success fw-bold w-100 shadow-sm mt-2"
@@ -384,9 +419,9 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                 </div>
               </div>
 
-              {/* Coluna Direita: Console / Logs */}
-              <div className="col-md-7 d-flex flex-column">
-                <div className="d-flex justify-content-between align-items-center mb-2">
+              {/* Right Column: Console / Logs */}
+              <div className="col-md-7 d-flex flex-column h-100">
+                <div className="d-flex justify-content-between align-items-center mb-2 flex-shrink-0">
                   <span className="fw-bold small text-uppercase text-secondary">
                     <i className="bi bi-terminal me-2"></i>System Logs
                   </span>
@@ -398,11 +433,11 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                   </div>
                 </div>
 
+                {/* Responsive log container using flex-grow */}
                 <div
                   className="form-control flex-grow-1 bg-dark text-light font-monospace small p-3 overflow-auto shadow-inner"
                   style={{
-                    minHeight: '400px',
-                    maxHeight: '400px',
+                    minHeight: 0,
                     resize: 'none',
                     lineHeight: '1.4',
                   }}
@@ -415,10 +450,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                         key={index}
                         style={{
                           wordWrap: 'break-word',
-                          whiteSpace: 'pre-wrap', // Garante que espaços e tabs sejam respeitados
+                          whiteSpace: 'pre-wrap', // Ensures that spaces and tabs are respected
                         }}
                       >
-                        {/* Ansi converte as cores de terminal \x1b[31m para CSS nativo do React */}
+                        {/* Ansi converts terminal colors \x1b[31m to React native CSS */}
                         <Ansi>{log}</Ansi>
                       </div>
                     ))
