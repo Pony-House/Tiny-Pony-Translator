@@ -392,7 +392,7 @@ export default function Translator({ apiMode, config }) {
             className={`btn btn-sm px-4 fw-bold ${inputMode === 'json' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
             onClick={() => setInputMode('json')}
           >
-            Translate JSON
+            Translate JSON (BETA)
           </button>
         </div>
 
