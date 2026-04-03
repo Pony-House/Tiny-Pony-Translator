@@ -163,7 +163,7 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
-  app.setAppUserModelId('com.jasmindreasond.iny-pony-translator');
+  app.setAppUserModelId('com.jasmindreasond.tiny-pony-translator');
 
   createWindow();
 
@@ -187,7 +187,7 @@ app.whenReady().then(() => {
     },
   ]);
 
-  tray.setToolTip('PonyTranslate');
+  tray.setToolTip('Tiny Pony Translator');
   tray.setContextMenu(contextMenu);
 
   tray.on('click', () => {
