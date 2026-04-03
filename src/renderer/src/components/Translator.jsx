@@ -432,6 +432,16 @@ export default function Translator({ apiMode, config }) {
     }
   };
 
+  /**
+   * @returns {void}
+   */
+  const handleClear = () => {
+    setSourceText('');
+    setTranslatedText('');
+    setTranslationOptions([]);
+    setSelectedOptionIndex(0);
+  };
+
   /** @type {boolean} */
   const isLibreEmpty = apiMode === 'libre' && libreLanguages.length === 0;
   /** @type {Array} */
@@ -573,18 +583,29 @@ export default function Translator({ apiMode, config }) {
                     <i className="bi bi-arrow-clockwise"></i>
                   </button>
                 </div>
-                <div className="card-body d-flex flex-column">
+                <div className="card-body d-flex flex-column position-relative">
                   {inputMode === 'text' ? (
-                    <textarea
-                      className="form-control border-0 fs-4 flex-grow-1 bg-body text-body"
-                      style={{ resize: 'none', boxShadow: 'none' }}
-                      placeholder={
-                        isOrthographic ? 'Type text to check spelling...' : 'Type to translate...'
-                      }
-                      disabled={isLibreEmpty}
-                      value={sourceText}
-                      onChange={(e) => handleSourceChange(e.target.value)}
-                    />
+                    <>
+                      <textarea
+                        className="form-control border-0 fs-4 flex-grow-1 bg-body text-body pb-4"
+                        style={{ resize: 'none', boxShadow: 'none' }}
+                        placeholder={
+                          isOrthographic ? 'Type text to check spelling...' : 'Type to translate...'
+                        }
+                        disabled={isLibreEmpty}
+                        value={sourceText}
+                        onChange={(e) => handleSourceChange(e.target.value)}
+                      />
+                      {sourceText && (
+                        <button
+                          className="btn btn-sm btn-outline-danger position-absolute bottom-0 end-0 m-3"
+                          onClick={handleClear}
+                          title="Clear text"
+                        >
+                          <i className="bi bi-trash me-1"></i>Clear
+                        </button>
+                      )}
+                    </>
                   ) : (
                     <div className="d-flex flex-column align-items-center justify-content-center h-100 text-center">
                       <h5 className="text-secondary mb-3">Upload a document to translate</h5>
