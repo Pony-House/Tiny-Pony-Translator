@@ -36,6 +36,11 @@ const api = {
    * @returns {Promise<{isRunning: boolean}>}
    */
   getLibreServerStatus: (sessionId) => ipcRenderer.invoke('get-libre-server-status', sessionId),
+  /**
+   * Restarts the Electron application.
+   * @returns {Promise<void>}
+   */
+  restartApp: () => ipcRenderer.invoke('restart-app'),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

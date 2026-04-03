@@ -184,6 +184,13 @@ export default function Settings({ config, setConfig }) {
             localStorage.setItem('lmHeader_standard', parsedData.prompts.lmHeader);
           }
         }
+
+        // Triggers the app restart to apply all settings properly
+        if (window.api && window.api.restartApp) {
+          setTimeout(() => {
+            window.api.restartApp();
+          }, 500);
+        }
       } catch (err) {
         console.error('Invalid JSON file', err);
       }

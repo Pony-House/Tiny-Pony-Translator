@@ -12,6 +12,11 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 
+ipcMain.handle('restart-app', () => {
+  app.relaunch();
+  app.exit();
+});
+
 // Checks if the process exists and is not killed
 ipcMain.handle('get-libre-server-status', (event, sessionId) => {
   const cp = activeProcesses.get(sessionId);
