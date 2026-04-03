@@ -50,6 +50,9 @@ export default function Settings({ config, setConfig }) {
   const fileInputRef = useRef(null);
 
   const [isLibreManagerOpen, setIsLibreManagerOpen] = useState(false);
+  const [isHttpsWeb] = useState(
+    !isElectron && typeof window !== 'undefined' && window.location.protocol === 'https:',
+  );
 
   /**
    * Exports the current settings, all prompt configurations, and local instance setups to a JSON file.
@@ -249,6 +252,16 @@ export default function Settings({ config, setConfig }) {
 
   return (
     <div className="h-100 overflow-auto w-100 pe-2 pb-3">
+      {isHttpsWeb && (
+        <div className="alert alert-warning py-2 mb-3 mx-2 small fw-bold d-flex align-items-center shadow-sm">
+          <i className="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning-emphasis"></i>
+          <div>
+            You are using the web version over HTTPS. Browsers may block connections to HTTP APIs
+            (Mixed Content). If you experience connection errors, ensure your API uses HTTPS or host
+            this web version over HTTP.
+          </div>
+        </div>
+      )}
       <div className="row g-4 m-0">
         <div className="col-md-6 px-2">
           <div className="card shadow-sm border-0 d-flex flex-column h-100">

@@ -262,7 +262,12 @@ export default function JsonManager({ executeSilentTranslation }) {
     [history, historyIndex],
   );
 
-  // Helper function to trigger a pure web download
+  /**
+   * Helper function to trigger a pure web download
+   * @param {string} jsonString
+   * @param {string} fileName
+   * @returns {boolean}
+   */
   const saveToWeb = (jsonString, fileName) => {
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = window.URL.createObjectURL(blob);
@@ -594,7 +599,11 @@ export default function JsonManager({ executeSilentTranslation }) {
 
   const collapseAll = () => setExpandedGroups(new Set());
 
-  // Robust delete that supports Array Items both in objects and directly at the root
+  /**
+  * Robust delete that supports Array Items both in objects and directly at the root
+   * @param {string} groupPath
+   * @returns {void}
+   */
   const handleDeleteGroup = (groupPath) => {
     if (!window.confirm(`Are you sure you want to delete the entire array item [${groupPath}]?`))
       return;
@@ -626,7 +635,11 @@ export default function JsonManager({ executeSilentTranslation }) {
     pushHistory(newData);
   };
 
-  // Robust clone that shifts subsequent elements and inserts the clone right after the original
+  /**
+   * Robust clone that shifts subsequent elements and inserts the clone right after the original
+   * @param {string} groupPath
+   * @returns {void}
+   */
   const handleCloneGroup = (groupPath) => {
     const match = groupPath.match(/^(?:(.*)\.)?(\d+)$/);
     if (!match) return;
@@ -776,6 +789,32 @@ export default function JsonManager({ executeSilentTranslation }) {
   };
 
   /**
+   * Trims trailing and leading whitespace from all currently selected strings.
+   * @returns {void}
+   */
+  const bulkTrimSelected = () => {
+    let hasChanges = false;
+    const newData = currentFlatData.map((item) => {
+      if (item.selected && item.isString && typeof item.value === 'string') {
+        const trimmed = item.value.trim();
+        if (trimmed !== item.value) {
+          hasChanges = true;
+          return {
+            ...item,
+            value: trimmed,
+            isEdited: trimmed !== item.original,
+          };
+        }
+      }
+      return item;
+    });
+
+    if (hasChanges) {
+      pushHistory(newData);
+    }
+  };
+
+  /**
    * @param {string} targetGroup
    * @returns {Array<{name: string, type: string}>}
    */
@@ -875,6 +914,10 @@ export default function JsonManager({ executeSilentTranslation }) {
     return Array.from(keys).sort();
   }, [currentFlatData]);
 
+  /**
+   * @param {string} key
+   * @returns {void}
+   */
   const toggleFilterKey = (key) => {
     setExcludedKeys((prev) => {
       const next = new Set(prev);
@@ -1214,6 +1257,15 @@ export default function JsonManager({ executeSilentTranslation }) {
             )}
           </div>
 
+          <button
+            className="btn btn-sm btn-outline-info fw-bold ms-2"
+            onClick={bulkTrimSelected}
+            disabled={selectedCount === 0 || isTranslatingAny}
+            title="Trim whitespaces from selected items"
+          >
+            <i className="bi bi-scissors me-1"></i>Bulk Trim
+          </button>
+
           {isTranslatingAny ? (
             <div className="d-flex align-items-center">
               <span className="btn btn-sm btn-warning fw-bold pe-none ms-2">
@@ -1390,13 +1442,27 @@ export default function JsonManager({ executeSilentTranslation }) {
                         }}
                       />
                       {item.isString && (
-                        <button
-                          className="btn btn-sm btn-primary text-nowrap align-self-start mt-1"
-                          onClick={() => handleTranslateSingle(item.originalIndex)}
-                          disabled={isTranslatingAny}
-                        >
-                          {translatingIndex === item.originalIndex ? '...' : 'Translate'}
-                        </button>
+                        <div className="d-flex flex-column gap-1 align-self-start mt-1">
+                          <button
+                            className="btn btn-sm btn-primary text-nowrap"
+                            onClick={() => handleTranslateSingle(item.originalIndex)}
+                            disabled={isTranslatingAny}
+                          >
+                            {translatingIndex === item.originalIndex ? '...' : 'Translate'}
+                          </button>
+                          <button
+                            className="btn btn-sm btn-outline-secondary text-nowrap"
+                            onClick={() => {
+                              if (typeof item.value === 'string') {
+                                handleValueChange(item.originalIndex, item.value.trim());
+                              }
+                            }}
+                            disabled={isTranslatingAny || typeof item.value !== 'string'}
+                            title="Trim leading and trailing whitespace"
+                          >
+                            Trim
+                          </button>
+                        </div>
                       )}
                     </div>
 
