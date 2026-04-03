@@ -42,6 +42,11 @@ const api = {
    * @returns {Promise<void>}
    */
   restartApp: () => ipcRenderer.invoke('restart-app'),
+  /**
+   * @param {string} url
+   * @returns {Promise<void>}
+   */
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

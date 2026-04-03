@@ -125,7 +125,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   // Auto-scroll the logs container
   useEffect(() => {
     if (logsEndRef.current && isOpen) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      logsEndRef.current.scrollIntoView({ behavior: 'instant' });
     }
   }, [logs, isOpen]);
 

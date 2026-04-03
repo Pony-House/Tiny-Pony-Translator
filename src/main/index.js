@@ -18,6 +18,10 @@ ipcMain.handle('restart-app', () => {
   app.exit();
 });
 
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+});
+
 // Checks if the process exists and is not killed
 ipcMain.handle('get-libre-server-status', (event, sessionId) => {
   const cp = activeProcesses.get(sessionId);

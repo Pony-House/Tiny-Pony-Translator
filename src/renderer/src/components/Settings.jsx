@@ -231,6 +231,19 @@ export default function Settings({ config, setConfig }) {
     setConfig({ ...config, lmLanguages: newLangs });
   };
 
+  /**
+   * Opens the GitHub repository link.
+   * @returns {void}
+   */
+  const handleOpenGitHub = () => {
+    const githubUrl = 'https://github.com/Pony-House/Tiny-Pony-Translator';
+    if (window.api && window.api.openExternal) {
+      window.api.openExternal(githubUrl);
+    } else {
+      window.open(githubUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="h-100 overflow-auto w-100 pe-2 pb-3">
       <div className="row g-4 m-0">
@@ -357,7 +370,7 @@ export default function Settings({ config, setConfig }) {
                 </select>
               </div>
 
-              <div>
+              <div className="mb-4">
                 <label className="form-label">Typing Delay (milliseconds)</label>
                 <input
                   type="number"
@@ -367,6 +380,23 @@ export default function Settings({ config, setConfig }) {
                     setConfig({ ...config, typingDelay: parseInt(e.target.value) || 1000 })
                   }
                 />
+              </div>
+
+              <h5 className="mb-3 border-top pt-3">About & Support</h5>
+              <div className="d-flex flex-column gap-2 mb-2">
+                <button
+                  className="btn btn-outline-dark text-body fw-bold w-100 shadow-sm d-flex justify-content-center align-items-center"
+                  style={{
+                    borderColor: 'var(--bs-border-color)',
+                  }}
+                  onClick={handleOpenGitHub}
+                >
+                  <i className="bi bi-github fs-5 me-2"></i>
+                  <span>Contribute or Donate on GitHub</span>
+                </button>
+                <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>
+                  Your support helps keep this project alive and growing!
+                </small>
               </div>
             </div>
           </div>
