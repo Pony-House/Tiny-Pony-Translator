@@ -677,7 +677,7 @@ export default function Translator({ apiMode, config }) {
                       />
                       {sourceText && (
                         <button
-                          className="btn btn-sm btn-outline-danger position-absolute bottom-0 end-0 m-3"
+                          className="btn btn-sm btn-outline-danger position-absolute bottom-0 end-0 m-3 me-5"
                           onClick={handleClear}
                           title="Clear text"
                         >
@@ -778,7 +778,7 @@ export default function Translator({ apiMode, config }) {
                       />
                       {translatedText && !translationError && (
                         <button
-                          className="btn btn-sm btn-outline-secondary position-absolute bottom-0 end-0 m-3"
+                          className="btn btn-sm btn-outline-secondary position-absolute bottom-0 end-0 m-3 me-5"
                           onClick={handleCopyText}
                           title="Copy translated text"
                         >
