@@ -51,13 +51,21 @@ export default function Settings({ config, setConfig }) {
   const [isLibreManagerOpen, setIsLibreManagerOpen] = useState(false);
 
   /**
-   * Exports the current settings and all prompt configurations to a JSON file.
+   * Exports the current settings, all prompt configurations, and local instance setups to a JSON file.
    * @returns {void}
    */
   const handleExport = () => {
     /** @type {object} */
     const exportData = {
       servers: config,
+      localInstance: {
+        installPath: localStorage.getItem('lt_installPath') || '~/libretranslate-env',
+        pythonPath: localStorage.getItem('lt_pythonPath') || 'python3',
+        languages: localStorage.getItem('lt_languages') || '',
+        port: localStorage.getItem('lt_port') || '5000',
+        isPublic: localStorage.getItem('lt_isPublic') === 'true',
+        apiKey: localStorage.getItem('lt_apiKey') || '',
+      },
       prompts: {
         promptMode: localStorage.getItem('promptMode') || 'standard',
         standard: {
@@ -98,7 +106,7 @@ export default function Settings({ config, setConfig }) {
   };
 
   /**
-   * Imports settings and prompts from a selected JSON file.
+   * Imports settings, local instance configurations, and prompts from a selected JSON file.
    * @param {import('react').ChangeEvent<HTMLInputElement>} e
    * @returns {void}
    */
@@ -115,6 +123,22 @@ export default function Settings({ config, setConfig }) {
         // Handle server config
         if (parsedData.servers && parsedData.servers.libre) {
           setConfig(parsedData.servers);
+        }
+
+        // Handle local instance config
+        if (parsedData.localInstance) {
+          if (parsedData.localInstance.installPath !== undefined)
+            localStorage.setItem('lt_installPath', parsedData.localInstance.installPath);
+          if (parsedData.localInstance.pythonPath !== undefined)
+            localStorage.setItem('lt_pythonPath', parsedData.localInstance.pythonPath);
+          if (parsedData.localInstance.languages !== undefined)
+            localStorage.setItem('lt_languages', parsedData.localInstance.languages);
+          if (parsedData.localInstance.port !== undefined)
+            localStorage.setItem('lt_port', parsedData.localInstance.port);
+          if (parsedData.localInstance.isPublic !== undefined)
+            localStorage.setItem('lt_isPublic', parsedData.localInstance.isPublic.toString());
+          if (parsedData.localInstance.apiKey !== undefined)
+            localStorage.setItem('lt_apiKey', parsedData.localInstance.apiKey);
         }
 
         // Handle prompt caches
