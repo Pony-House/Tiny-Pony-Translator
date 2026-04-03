@@ -180,3 +180,24 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+app.on('before-quit', () => {
+  for (const [sessionId, cp] of activeProcesses.entries()) {
+    if (cp && !cp.killed) {
+      try {
+        // Kill the entire process group just like we do in the stop command
+        process.kill(-cp.pid);
+        console.log(`[CleanUp] Killed process group for session: ${sessionId}`);
+      } catch (err) {
+        console.error(err);
+        // Safe fallback in case the process group is already dead
+        try {
+          cp.kill('SIGKILL');
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }
+  activeProcesses.clear();
+});
