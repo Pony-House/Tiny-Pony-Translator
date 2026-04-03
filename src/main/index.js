@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 
+import os from 'os';
 import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
@@ -25,9 +26,22 @@ ipcMain.handle('get-libre-server-status', (event, sessionId) => {
   };
 });
 
-ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionId) => {
+ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionId, osType) => {
   return new Promise((resolve) => {
-    const cp = spawn('bash', ['-c', scriptString], { detached: true });
+    let cp;
+
+    // Detects whether it's Windows to run with PowerShell, or it goes from bash
+    const isWindows = os.platform() === 'win32' || osType === 'Windows';
+
+    if (isWindows) {
+      // In Windows, creating an isolated group of processes (detached) works differently.
+      // PowerShell can run block scripts by passing them as '-Command'
+      cp = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', scriptString], {
+        detached: true,
+      });
+    } else {
+      cp = spawn('bash', ['-c', scriptString], { detached: true });
+    }
 
     activeProcesses.set(sessionId, cp);
 
@@ -58,7 +72,15 @@ ipcMain.handle('stop-libre-command', (event, sessionId) => {
   const cp = activeProcesses.get(sessionId);
   if (cp) {
     try {
-      process.kill(-cp.pid);
+      const isWindows = os.platform() === 'win32';
+      if (isWindows) {
+        // In Windows, to kill the process tree we use Taskkill
+        const { execSync } = require('child_process');
+        execSync(`taskkill /pid ${cp.pid} /T /F`);
+      } else {
+        // In Unix, we kill the entire group of processes passing the negative PID
+        process.kill(-cp.pid);
+      }
     } catch (err) {
       console.error(err);
       // Fallback safe in case the group is already dead or something strange happens

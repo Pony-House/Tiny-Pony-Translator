@@ -66,6 +66,17 @@ const clearGlobalLogs = () => {
 };
 
 /**
+ * Detects the current Operating System.
+ * @returns {'Windows' | 'Mac' | 'Linux'}
+ */
+const detectOS = () => {
+  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+  if (/windows phone/i.test(userAgent) || /win/i.test(userAgent)) return 'Windows';
+  if (/mac/i.test(userAgent)) return 'Mac';
+  return 'Linux';
+};
+
+/**
  * Component to manage the local installation and execution of LibreTranslate.
  * @param {Object} props - Component properties.
  * @param {boolean} props.isOpen - Determines if the manager modal is visible.
@@ -73,12 +84,19 @@ const clearGlobalLogs = () => {
  * @returns {JSX.Element|null} The modal element or null if closed.
  */
 export default function LibreTranslateManager({ isOpen, onClose }) {
+  const osType = detectOS();
+
+  // Determine default paths based on OS
+  const defaultPython = osType === 'Windows' ? 'python' : 'python3';
+  const defaultInstallPath =
+    osType === 'Windows' ? '%USERPROFILE%\\libretranslate-env' : '~/libretranslate-env';
+
   // Server and Environment Configuration
   const [installPath, setInstallPath] = useState(
-    () => localStorage.getItem('lt_installPath') || `~/libretranslate-env`,
+    () => localStorage.getItem('lt_installPath') || defaultInstallPath,
   );
   const [pythonPath, setPythonPath] = useState(
-    () => localStorage.getItem('lt_pythonPath') || 'python3',
+    () => localStorage.getItem('lt_pythonPath') || defaultPython,
   );
   const [languages, setLanguages] = useState(() => localStorage.getItem('lt_languages') || '');
   const [port, setPort] = useState(() => localStorage.getItem('lt_port') || '5000');
@@ -151,6 +169,160 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   /**
+   * Generates the OS-specific shell script to manage LibreTranslate.
+   * @param {string} action
+   * @returns {string} The formatted script string.
+   */
+  const generateScript = (action) => {
+    // Config
+    const loadOnlyEnv = languages.trim() ? ` --load-only ${languages.trim()}` : '';
+    const host = isPublic ? '0.0.0.0' : '127.0.0.1';
+    const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
+    const config = ` --host ${host} --port ${port} ${apiArg}`;
+
+    if (osType === 'Windows') {
+      // PowerShell Script for Windows
+      const source = `${installPath}\\argos-translate`;
+      const target = `$env:USERPROFILE\\.local\\share\\argos-translate`;
+
+      let linkCreator = `
+        $PYTHONUNBUFFERED=1
+        $SOURCE = "${source}"
+        $TARGET = "${target}"
+
+        if (-not (Test-Path "$TARGET" -PathType Container)) {
+          New-Item -ItemType Directory -Force -Path (Split-Path $TARGET) | Out-Null
+        }
+
+        if (Test-Path -Path $TARGET) {
+            $link = Get-Item -Path $TARGET
+            if ($link.LinkType) {
+                if ($link.Target -eq $SOURCE) {
+                    Write-Host "Skipping: The link already exists and points to the correct location."
+                } else {
+                    Write-Error "Error: A link already exists at '$TARGET' but points to '$($link.Target)' instead of '$SOURCE'."
+                    exit 1
+                }
+            } else {
+                Write-Error "Error: '$TARGET' exists and is a regular directory, not a link."
+                exit 1
+            }
+        }
+      `;
+
+      if (action === 'install') {
+        linkCreator += `
+        else {
+            New-Item -ItemType SymbolicLink -Path $TARGET -Target $SOURCE | Out-Null
+            Write-Host "Success: Symbolic link created successfully."
+        }
+        `;
+        return `
+          New-Item -ItemType Directory -Force -Path "${installPath}\\argos-translate" | Out-Null
+          ${linkCreator}
+          & "${pythonPath}" -m venv "${installPath}"
+          & "${installPath}\\Scripts\\activate.ps1"
+          python -m pip install --upgrade pip
+          pip install libretranslate
+          libretranslate${config}${loadOnlyEnv}
+        `;
+      } else if (action === 'update') {
+        return `
+          ${linkCreator}
+          & "${installPath}\\Scripts\\activate.ps1"
+          python -m pip install --upgrade pip
+          pip install --upgrade libretranslate
+          libretranslate${config} --update-models ${loadOnlyEnv}
+        `;
+      } else if (action === 'start') {
+        return `
+          ${linkCreator}
+          & "${installPath}\\Scripts\\activate.ps1"
+          libretranslate${config}
+        `;
+      }
+    } else {
+      // Bash Script for Linux/Mac
+
+      // Define source and target paths
+      const source = `${installPath}/argos-translate`;
+      const target = `$HOME/.local/share/argos-translate`;
+
+      // Link creator script (Part 1)
+      let linkCreator = `
+        # Forces Python to output logs in real-time (disables buffering)
+        export PYTHONUNBUFFERED=1
+
+        # Define source and target paths
+        SOURCE="${source}"
+        TARGET="${target}"
+
+        # Check if target exists (as a symlink, file, or directory)
+        if [ -L "$TARGET" ]; then
+            # It's a symbolic link. Let's check where it points to.
+            # readlink -f gets the absolute path
+            CURRENT_PATH=$(readlink -f "$TARGET")
+
+            if [ "$CURRENT_PATH" == "$SOURCE" ]; then
+                echo -e "\\e[32mSkipping: The link already exists and points to the correct location.\\e[0m"
+            else
+                echo -e "\\e[31mError: A link already exists at '$TARGET' but points to '$CURRENT_PATH' instead of '$SOURCE'.\\e[0m" >&2
+                exit 1
+            fi
+        elif [ -e "$TARGET" ]; then
+            # The path exists but is NOT a symbolic link (it's a real file or folder)
+            echo -e "\\e[31mError: '$TARGET' exists and is a regular file/directory, not a link.\\e[0m" >&2
+            exit 1
+      `;
+
+      if (action === 'install') {
+        // Link creator (Part 2)
+        linkCreator += `
+        else
+            ln -s "$SOURCE" "$TARGET"
+            echo -e "\\e[32mSuccess: Symbolic link created successfully.\\e[0m"
+        fi`;
+
+        // Command
+        return `
+          mkdir -p "${installPath}/argos-translate"
+          ${linkCreator}
+          "${pythonPath}" -m venv "${installPath}"
+          source "${installPath}/bin/activate"
+          pip install --upgrade pip
+          pip install libretranslate
+          libretranslate${config}${loadOnlyEnv}
+        `;
+      } else if (action === 'update') {
+        // Link creator (Part 2)
+        linkCreator += `
+          fi`;
+
+        // Command
+        return `
+          ${linkCreator}
+          source "${installPath}/bin/activate"
+          pip install --upgrade pip
+          pip install --upgrade libretranslate
+          libretranslate${config} --update-models ${loadOnlyEnv}
+        `;
+      } else if (action === 'start') {
+        // Link creator (Part 2)
+        linkCreator += `
+        fi`;
+
+        // Command
+        return `
+          ${linkCreator}
+          source "${installPath}/bin/activate"
+          libretranslate${config}
+        `;
+      }
+    }
+    return '';
+  };
+
+  /**
    * Sends formatted commands for the Electron backend to execute in the shell.
    * @param {string} action - The action to perform ('install', 'update', 'start', 'stop', 'cancel').
    * @returns {Promise<void>}
@@ -172,99 +344,24 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       return;
     }
 
-    const loadOnlyEnv = languages.trim() ? ` --load-only ${languages.trim()}` : '';
-    let script = '';
-
-    // Link creator script (Part 1)
-    let linkCreator = `
-      # Forces Python to output logs in real-time (disables buffering)
-      export PYTHONUNBUFFERED=1
-
-      # Define source and target paths
-      SOURCE="${installPath}/argos-translate"
-      TARGET="$HOME/.local/share/argos-translate"
-
-      # Check if target exists (as a symlink, file, or directory)
-      if [ -L "$TARGET" ]; then
-          # It's a symbolic link. Let's check where it points to.
-          # readlink -f gets the absolute path
-          CURRENT_PATH=$(readlink -f "$TARGET")
-
-          if [ "$CURRENT_PATH" == "$SOURCE" ]; then
-              echo -e "\\e[32mSkipping: The link already exists and points to the correct location.\\e[0m"
-          else
-              echo -e "\\e[31mError: A link already exists at '$TARGET' but points to '$CURRENT_PATH' instead of '$SOURCE'.\\e[0m" >&2
-              exit 1
-          fi
-      elif [ -e "$TARGET" ]; then
-          # The path exists but is NOT a symbolic link (it's a real file or folder)
-          echo -e "\\e[31mError: '$TARGET' exists and is a regular file/directory, not a link.\\e[0m" >&2
-          exit 1
-    `;
-
-    // Config
-    const host = isPublic ? '0.0.0.0' : '127.0.0.1';
-    const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
-    const config = ` --host ${host} --port ${port} ${apiArg}`;
+    const script = generateScript(action);
 
     if (action === 'install') {
       setIsProcessing(true);
-      pushLocalLog('\x1b[36mStarting installation process...\x1b[0m');
-
-      // Link creator (Part 2)
-      linkCreator += `
-      else
-          ln -s "$SOURCE" "$TARGET"
-          echo -e "\\e[32mSuccess: Symbolic link created successfully.\\e[0m"
-      fi`;
-
-      // Command
-      script = `
-        mkdir -p "${installPath}/argos-translate"
-        ${linkCreator}
-        "${pythonPath}" -m venv "${installPath}"
-        source "${installPath}/bin/activate"
-        pip install --upgrade pip
-        pip install libretranslate
-        libretranslate${config}${loadOnlyEnv}
-      `;
+      pushLocalLog(`\x1b[36mStarting installation process on ${osType}...\x1b[0m`);
     } else if (action === 'update') {
       setIsProcessing(true);
-      pushLocalLog('\x1b[36mStarting update process...\x1b[0m');
-
-      // Link creator (Part 2)
-      linkCreator += `
-      fi`;
-
-      // Command
-      script = `
-        ${linkCreator}
-        source "${installPath}/bin/activate"
-        pip install --upgrade pip
-        pip install --upgrade libretranslate
-        libretranslate${config} --update-models ${loadOnlyEnv}
-      `;
+      pushLocalLog(`\x1b[36mStarting update process on ${osType}...\x1b[0m`);
     } else if (action === 'start') {
-      pushLocalLog('\x1b[36mStarting LibreTranslate instance...\x1b[0m');
-
-      // Link creator (Part 2)
-      linkCreator += `
-      fi`;
-
-      // Command
-      script = `
-        ${linkCreator}
-        source "${installPath}/bin/activate"
-        libretranslate${config}
-      `;
+      pushLocalLog(`\x1b[36mStarting LibreTranslate instance on ${osType}...\x1b[0m`);
     }
 
     try {
       // Stores the current active action in local storage so it persists if modal closes
       localStorage.setItem('lt_activeAction', action);
 
-      // Execute using the unified session ID
-      await window.api.runLibreCommand(action, script, SERVER_SESSION_ID);
+      // Execute using the unified session ID, passing the OS type
+      await window.api.runLibreCommand(action, script, SERVER_SESSION_ID, osType);
 
       // If the backend resolved immediately (e.g. start background task), we mark as running.
       if (action === 'start') {
@@ -275,7 +372,6 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     } finally {
       // If it was install or update, the promise resolves when it's done.
       // We can turn off processing state and clean up the active action safely.
-      // This will even run in the background if the component is unmounted!
       if (action !== 'start') {
         setIsProcessing(false);
         localStorage.removeItem('lt_activeAction');
@@ -297,7 +393,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
         >
           <div className="modal-header bg-body-tertiary border-bottom-0 flex-shrink-0 d-flex align-items-center">
             <h5 className="modal-title fw-bold text-primary m-0">
-              <i className="bi bi-translate me-2"></i>Local LibreTranslate Manager
+              <i className="bi bi-translate me-2"></i>Local LibreTranslate Manager{' '}
+              <span className="badge bg-secondary ms-2" style={{ fontSize: '0.6em' }}>
+                {osType}
+              </span>
             </h5>
             <div className="ms-auto d-flex align-items-center gap-2">
               <button
@@ -332,7 +431,11 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                       <input
                         type="text"
                         className="form-control form-control-sm"
-                        placeholder="e.g., python3 or /usr/bin/python3"
+                        placeholder={
+                          osType === 'Windows'
+                            ? 'e.g., python or C:\\Python39\\python.exe'
+                            : 'e.g., python3 or /usr/bin/python3'
+                        }
                         value={pythonPath}
                         onChange={(e) => setPythonPath(e.target.value)}
                         disabled={isRunning || isProcessing}

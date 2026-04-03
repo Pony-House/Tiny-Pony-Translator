@@ -9,10 +9,11 @@ const api = {
    * @param {string} action
    * @param {string} script
    * @param {string} sessionId
+   * @param {string} osType
    * @returns {Promise<void>}
    */
-  runLibreCommand: (action, script, sessionId) =>
-    ipcRenderer.invoke('run-libre-command', action, script, sessionId),
+  runLibreCommand: (action, script, sessionId, osType) =>
+    ipcRenderer.invoke('run-libre-command', action, script, sessionId, osType),
 
   /**
    * @param {string} sessionId
