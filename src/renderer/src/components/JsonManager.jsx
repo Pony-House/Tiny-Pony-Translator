@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { isElectron } from '../utils/values';
 
 /**
  * @param {Object} obj
@@ -261,8 +262,23 @@ export default function JsonManager({ executeSilentTranslation }) {
     [history, historyIndex],
   );
 
+  // Helper function to trigger a pure web download
+  const saveToWeb = (jsonString, fileName) => {
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'translated.json';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    a.remove();
+    return true;
+  };
+
   const handleOpen = async () => {
-    if (window.api && window.api.openJson) {
+    if (isElectron && window.api.openJson) {
+      // Electron Flow
       const result = await window.api.openJson();
       if (result) {
         try {
@@ -294,14 +310,60 @@ export default function JsonManager({ executeSilentTranslation }) {
           alert('Invalid JSON file. The structure is malformed or not supported.');
         }
       }
+    } else {
+      // Web Flow
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const parsed = JSON.parse(event.target.result);
+            if (!parsed || typeof parsed !== 'object') {
+              throw new Error('Invalid JSON structure.');
+            }
+            const flat = flattenJson(parsed).map((item) => ({
+              ...item,
+              original: item.value,
+              isEdited: false,
+              selected: false,
+              alts: [],
+            }));
+            setFilePath(file.name); // Using only filename for web
+            setOriginalFlat(flat);
+            setHistory([flat]);
+            setHistoryIndex(0);
+            setExpandedGroups(new Set());
+            setExcludedKeys(new Set());
+            setRowHeights({});
+            updateDimensions(setContainerHeight, setViewportHeight, containerRef);
+          } catch (err) {
+            console.error(err);
+            alert('Invalid JSON file. The structure is malformed or not supported.');
+          }
+        };
+        reader.readAsText(file);
+      };
+      input.click();
     }
   };
 
   const handleSave = useCallback(async () => {
-    if (!window.api || !filePath || isTranslatingAny) return;
+    if (!filePath || isTranslatingAny) return;
     try {
       const reconstructed = unflattenJson(currentFlatData);
-      const success = await window.api.saveJson(filePath, JSON.stringify(reconstructed, null, 2));
+      const jsonString = JSON.stringify(reconstructed, null, 2);
+      let success = false;
+
+      if (isElectron && window.api.saveJson) {
+        success = await window.api.saveJson(filePath, jsonString);
+      } else {
+        success = saveToWeb(jsonString, filePath);
+      }
+
       if (success) {
         const newFlat = currentFlatData.map((item) => ({
           ...item,
@@ -323,7 +385,7 @@ export default function JsonManager({ executeSilentTranslation }) {
    * @returns {Promise<void>}
    */
   const handleSaveSingle = async (index) => {
-    if (!window.api || !filePath || isTranslatingAny) return;
+    if (!filePath || isTranslatingAny) return;
 
     // Build a hybrid array: Keep the new value only for the current item, and restore the 'original' to others.
     const partialData = currentFlatData.map((item, i) => {
@@ -333,7 +395,14 @@ export default function JsonManager({ executeSilentTranslation }) {
 
     try {
       const reconstructed = unflattenJson(partialData);
-      const success = await window.api.saveJson(filePath, JSON.stringify(reconstructed, null, 2));
+      const jsonString = JSON.stringify(reconstructed, null, 2);
+      let success = false;
+
+      if (isElectron && window.api.saveJson) {
+        success = await window.api.saveJson(filePath, jsonString);
+      } else {
+        success = saveToWeb(jsonString, filePath);
+      }
 
       if (success) {
         // Update the original baseline to exactly mirror what was saved on the disk

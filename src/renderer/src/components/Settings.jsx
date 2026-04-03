@@ -8,6 +8,7 @@ import {
   DEFAULT_LM_AUTO_INSTRUCTION_ORTH,
 } from '../utils/defaultValues';
 import LibreTranslateManager from './LibreTranslateManager';
+import { isElectron } from '../utils/values';
 
 /**
  * @typedef {Object} LibreConfig
@@ -186,11 +187,13 @@ export default function Settings({ config, setConfig }) {
         }
 
         // Triggers the app restart to apply all settings properly
-        if (window.api && window.api.restartApp) {
-          setTimeout(() => {
+        setTimeout(() => {
+          if (isElectron && window.api.restartApp) {
             window.api.restartApp();
-          }, 500);
-        }
+          } else {
+            window.location.reload();
+          }
+        }, 500);
       } catch (err) {
         console.error('Invalid JSON file', err);
       }
@@ -237,7 +240,7 @@ export default function Settings({ config, setConfig }) {
    */
   const handleOpenGitHub = () => {
     const githubUrl = 'https://github.com/Pony-House/Tiny-Pony-Translator';
-    if (window.api && window.api.openExternal) {
+    if (isElectron && window.api.openExternal) {
       window.api.openExternal(githubUrl);
     } else {
       window.open(githubUrl, '_blank', 'noopener,noreferrer');
@@ -309,16 +312,20 @@ export default function Settings({ config, setConfig }) {
                   }
                 />
               </div>
-              <div className="mb-4">
-                <button
-                  className="btn btn-sm btn-primary fw-bold w-100"
-                  onClick={() => setIsLibreManagerOpen(true)}
-                >
-                  <i className="bi bi-hdd-network me-2"></i>Manage Local Instance
-                </button>
-              </div>
 
-              <h5 className="mb-3">OpenAi Compatible API</h5>
+              {/* Show Local Manager ONLY in Electron */}
+              {isElectron && (
+                <div className="mb-4">
+                  <button
+                    className="btn btn-sm btn-primary fw-bold w-100"
+                    onClick={() => setIsLibreManagerOpen(true)}
+                  >
+                    <i className="bi bi-hdd-network me-2"></i>Manage Local Instance
+                  </button>
+                </div>
+              )}
+
+              <h5 className="mb-3 mt-4">OpenAi Compatible API</h5>
               <div className="input-group mb-2">
                 <select
                   className="form-select flex-grow-0"
@@ -453,10 +460,12 @@ export default function Settings({ config, setConfig }) {
         </div>
       </div>
 
-      <LibreTranslateManager
-        isOpen={isLibreManagerOpen}
-        onClose={() => setIsLibreManagerOpen(false)}
-      />
+      {isElectron && (
+        <LibreTranslateManager
+          isOpen={isLibreManagerOpen}
+          onClose={() => setIsLibreManagerOpen(false)}
+        />
+      )}
     </div>
   );
 }
