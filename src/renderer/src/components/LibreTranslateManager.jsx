@@ -76,6 +76,34 @@ const detectOS = () => {
   return 'Linux';
 };
 
+// ============================================================================
+// Security Sandbox Sanitizers (Anti-Command Injection)
+// ============================================================================
+
+const sanitizePath = (val, fallback) => {
+  if (!val || typeof val !== 'string') return fallback;
+  // Strips dangerous shell characters: ; & | ` $ ( ) { } < > ' " \n
+  const cleaned = val.replace(/[;&|`$(){}<>'"\n]/g, '').trim();
+  return cleaned || fallback;
+};
+
+const sanitizePort = (val) => {
+  const p = parseInt(val, 10);
+  return !isNaN(p) && p > 0 && p <= 65535 ? p.toString() : '5000';
+};
+
+const sanitizeLanguages = (val) => {
+  if (!val || typeof val !== 'string') return '';
+  // Only allow letters, numbers, commas, and hyphens (e.g. en,zh-CN,pt)
+  return val.replace(/[^a-zA-Z0-9,-]/g, '');
+};
+
+const sanitizeApiKey = (val) => {
+  if (!val || typeof val !== 'string') return '';
+  // Allow alphanumeric and safe basic characters
+  return val.replace(/[^a-zA-Z0-9_-]/g, '');
+};
+
 /**
  * Component to manage the local installation and execution of LibreTranslate.
  * @param {Object} props - Component properties.
@@ -91,17 +119,19 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   const defaultInstallPath =
     osType === 'Windows' ? '%USERPROFILE%\\libretranslate-env' : '~/libretranslate-env';
 
-  // Server and Environment Configuration
-  const [installPath, setInstallPath] = useState(
-    () => localStorage.getItem('lt_installPath') || defaultInstallPath,
+  // Server and Environment Configuration with Sandbox Sanitization
+  const [installPath, setInstallPath] = useState(() =>
+    sanitizePath(localStorage.getItem('lt_installPath'), defaultInstallPath),
   );
-  const [pythonPath, setPythonPath] = useState(
-    () => localStorage.getItem('lt_pythonPath') || defaultPython,
+  const [pythonPath, setPythonPath] = useState(() =>
+    sanitizePath(localStorage.getItem('lt_pythonPath'), defaultPython),
   );
-  const [languages, setLanguages] = useState(() => localStorage.getItem('lt_languages') || '');
-  const [port, setPort] = useState(() => localStorage.getItem('lt_port') || '5000');
+  const [languages, setLanguages] = useState(() =>
+    sanitizeLanguages(localStorage.getItem('lt_languages')),
+  );
+  const [port, setPort] = useState(() => sanitizePort(localStorage.getItem('lt_port')));
   const [isPublic, setIsPublic] = useState(() => localStorage.getItem('lt_isPublic') === 'true');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('lt_apiKey') || '');
+  const [apiKey, setApiKey] = useState(() => sanitizeApiKey(localStorage.getItem('lt_apiKey')));
 
   // Process State and Logs
   const [isRunning, setIsRunning] = useState(false);
@@ -112,15 +142,24 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   // We unify the session ID so install/update/start all use the same tracking mechanism.
   const SERVER_SESSION_ID = 'libre-server';
 
-  // Save configurations to local cache
+  // Save configurations to local cache (Ensuring clean values are saved)
   useEffect(() => {
-    localStorage.setItem('lt_installPath', installPath);
-    localStorage.setItem('lt_pythonPath', pythonPath);
-    localStorage.setItem('lt_languages', languages);
-    localStorage.setItem('lt_port', port);
+    localStorage.setItem('lt_installPath', sanitizePath(installPath, defaultInstallPath));
+    localStorage.setItem('lt_pythonPath', sanitizePath(pythonPath, defaultPython));
+    localStorage.setItem('lt_languages', sanitizeLanguages(languages));
+    localStorage.setItem('lt_port', sanitizePort(port));
     localStorage.setItem('lt_isPublic', isPublic.toString());
-    localStorage.setItem('lt_apiKey', apiKey);
-  }, [installPath, pythonPath, languages, port, isPublic, apiKey]);
+    localStorage.setItem('lt_apiKey', sanitizeApiKey(apiKey));
+  }, [
+    installPath,
+    pythonPath,
+    languages,
+    port,
+    isPublic,
+    apiKey,
+    defaultInstallPath,
+    defaultPython,
+  ]);
 
   // Auto-scroll the logs container
   useEffect(() => {

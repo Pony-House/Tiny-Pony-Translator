@@ -398,22 +398,35 @@ export default function Translator({ apiMode, config }) {
         body: formData,
       });
 
-      if (!translateRes.ok) throw new Error('Failed to translate file');
+      if (!translateRes.ok) throw new Error(`HTTP ${translateRes.status}`);
 
       /** @type {{translatedFileUrl: string}} */
       const data = await translateRes.json();
 
-      if (!data.translatedFileUrl) throw new Error('No translation URL returned from API');
+      // Sandbox: Validate API Response
+      if (!data || typeof data !== 'object' || typeof data.translatedFileUrl !== 'string') {
+        throw new Error('Invalid file translation API response format');
+      }
 
-      /** @type {string} */
-      const downloadUrl =
-        data.translatedFileUrl.startsWith('http://') ||
-        data.translatedFileUrl.startsWith('https://')
-          ? data.translatedFileUrl
-          : `${getBaseUrl('libre')}${data.translatedFileUrl}`;
+      let downloadUrl = data.translatedFileUrl.trim();
+
+      // Sandbox: URL Protocol Validation to prevent malicious schemas
+      if (downloadUrl.startsWith('http://') || downloadUrl.startsWith('https://')) {
+        try {
+          const parsedUrl = new URL(downloadUrl);
+          if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+            throw new Error('Unsafe URL protocol detected');
+          }
+        } catch {
+          throw new Error('Malformed URL returned from API');
+        }
+      } else {
+        downloadUrl = `${getBaseUrl('libre')}${downloadUrl.startsWith('/') ? '' : '/'}${downloadUrl}`;
+      }
 
       const fileRes = await fetch(downloadUrl);
       if (!fileRes.ok) throw new Error('Failed to fetch the translated blob data');
+
       const blob = await fileRes.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -435,7 +448,7 @@ export default function Translator({ apiMode, config }) {
         setFileQueue((prev) => prev.filter((item) => item.id !== id));
       }, 5000);
     } catch (err) {
-      console.error(err);
+      console.error('File Upload/Translation error:', err);
       setFileQueue((prev) =>
         prev.map((item) => (item.id === id ? { ...item, status: 'Error' } : item)),
       );
