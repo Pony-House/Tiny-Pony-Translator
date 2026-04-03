@@ -307,7 +307,7 @@ export default function Settings({ config, setConfig }) {
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="127.0.0.1:5000"
+                  placeholder={isElectron ? '127.0.0.1:5000' : 'libretranslate.com'}
                   value={config.libre.ip}
                   onChange={(e) =>
                     setConfig({ ...config, libre: { ...config.libre, ip: e.target.value } })

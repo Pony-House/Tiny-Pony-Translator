@@ -125,6 +125,7 @@ export default function Translator({ apiMode, config }) {
   };
 
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translationError, setTranslationError] = useState('');
 
   // State for AI Prompts Modal
   const [showPromptsModal, setShowPromptsModal] = useState(false);
@@ -237,10 +238,20 @@ export default function Translator({ apiMode, config }) {
           signal,
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          let errorMsg = `HTTP ${res.status}`;
+          try {
+            const errData = await res.json();
+            if (errData.error) errorMsg = errData.error;
+          } catch (e) {
+            console.error(e);
+          }
+          throw new Error(errorMsg);
+        }
+
         const data = await res.json();
 
-        // Validation Sandbox
+        // Sandbox: Validate API Response
         if (!data || typeof data !== 'object') throw new Error('Malformed LibreTranslate payload');
 
         const mainText = typeof data.translatedText === 'string' ? data.translatedText : '';
@@ -286,10 +297,20 @@ export default function Translator({ apiMode, config }) {
           signal,
         });
 
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+          let errorMsg = `HTTP ${res.status}`;
+          try {
+            const errData = await res.json();
+            if (errData.error?.message) errorMsg = errData.error.message;
+          } catch (e) {
+            console.error(e);
+          }
+          throw new Error(errorMsg);
+        }
+
         const data = await res.json();
 
-        // Validation Sandbox
+        // Sandbox: Validate API Response
         if (
           !data ||
           typeof data !== 'object' ||
@@ -317,7 +338,7 @@ export default function Translator({ apiMode, config }) {
     } catch (err) {
       if (err.name === 'AbortError') throw err;
       console.error('Translation validation error:', err);
-      return null;
+      throw err; // Re-throw to be caught by executeTranslation
     }
   };
 
@@ -329,10 +350,12 @@ export default function Translator({ apiMode, config }) {
     if (!text.trim()) {
       setTranslatedText('');
       setTranslationOptions([]);
+      setTranslationError('');
       return;
     }
 
     setIsTranslating(true);
+    setTranslationError(''); // Reset errors
 
     try {
       const result = await executeSilentTranslation(text, null);
@@ -342,7 +365,8 @@ export default function Translator({ apiMode, config }) {
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('Translation error:', err);
-      setTranslatedText('Error: Connection failed. Check your server settings.');
+      setTranslationError(err.message || 'Connection failed.');
+      setTranslatedText('');
       setTranslationOptions([]);
     } finally {
       setIsTranslating(false);
@@ -741,12 +765,18 @@ export default function Translator({ apiMode, config }) {
                   {inputMode === 'text' ? (
                     <>
                       <textarea
-                        className={`form-control border-0 fs-4 bg-body text-body flex-grow-1 pb-4 ${isOrthographic && translatedText ? 'text-warning-emphasis' : ''}`}
+                        className={`form-control border-0 fs-4 flex-grow-1 pb-4 ${
+                          translationError
+                            ? 'text-danger bg-danger-subtle'
+                            : isOrthographic && translatedText
+                              ? 'text-warning-emphasis bg-body'
+                              : 'text-body bg-body'
+                        }`}
                         style={{ resize: 'none', boxShadow: 'none' }}
                         readOnly
-                        value={translatedText}
+                        value={translationError ? `API Error: ${translationError}` : translatedText}
                       />
-                      {translatedText && (
+                      {translatedText && !translationError && (
                         <button
                           className="btn btn-sm btn-outline-secondary position-absolute bottom-0 end-0 m-3"
                           onClick={handleCopyText}

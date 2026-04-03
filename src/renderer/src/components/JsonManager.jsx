@@ -600,7 +600,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   const collapseAll = () => setExpandedGroups(new Set());
 
   /**
-  * Robust delete that supports Array Items both in objects and directly at the root
+   * Robust delete that supports Array Items both in objects and directly at the root
    * @param {string} groupPath
    * @returns {void}
    */

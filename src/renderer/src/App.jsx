@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Settings from './components/Settings';
 import Translator from './components/Translator';
 import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
+import { isElectron } from './utils/values';
 
 /**
  * Validates and sanitizes the parsed configuration object to prevent injection or corruption.
@@ -9,8 +10,13 @@ import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
  * @returns {import('./components/Settings').SettingsParams}
  */
 const sanitizeConfig = (parsed) => {
+  // Set default LibreTranslate based on environment
+  const defaultLibre = isElectron
+    ? { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' }
+    : { protocol: 'https', ip: 'libretranslate.com', apiKey: '' };
+
   const safeConfig = {
-    libre: { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' },
+    libre: defaultLibre,
     openaic: { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' },
     typingDelay: 1000,
     lmLanguages: LM_HARDCODED_LANGUAGES,
@@ -25,7 +31,7 @@ const sanitizeConfig = (parsed) => {
     safeConfig.libre.ip =
       typeof parsed.libre.ip === 'string'
         ? parsed.libre.ip.replace(/[^a-zA-Z0-9.:-]/g, '').substring(0, 100)
-        : '127.0.0.1:5000';
+        : safeConfig.libre.ip;
     safeConfig.libre.apiKey =
       typeof parsed.libre.apiKey === 'string' ? parsed.libre.apiKey.substring(0, 200) : '';
   }
@@ -36,7 +42,7 @@ const sanitizeConfig = (parsed) => {
     safeConfig.openaic.ip =
       typeof parsed.openaic.ip === 'string'
         ? parsed.openaic.ip.replace(/[^a-zA-Z0-9.:-]/g, '').substring(0, 100)
-        : '127.0.0.1:1234';
+        : safeConfig.openaic.ip;
     safeConfig.openaic.apiKey =
       typeof parsed.openaic.apiKey === 'string' ? parsed.openaic.apiKey.substring(0, 200) : '';
   }
@@ -84,14 +90,6 @@ export default function App() {
       try {
         /** @type {import('./components/Settings').SettingsParams} */
         const parsed = JSON.parse(savedConfig);
-        if (!parsed.typingDelay) parsed.typingDelay = 1000;
-        if (!parsed.lmLanguages) parsed.lmLanguages = LM_HARDCODED_LANGUAGES;
-        if (!parsed.theme) parsed.theme = 'auto';
-        if (!parsed.libre) parsed.libre = { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' };
-        if (!parsed.openaic)
-          parsed.openaic = { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' };
-        if (!parsed.libre.apiKey) parsed.libre.apiKey = '';
-        if (!parsed.openaic.apiKey) parsed.openaic.apiKey = '';
         return sanitizeConfig(parsed);
       } catch {
         // Fallback to default if JSON is corrupted
