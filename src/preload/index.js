@@ -1,9 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { normalize } from 'node:path';
 
 // Custom APIs for renderer
 const api = {
   openJson: () => ipcRenderer.invoke('dialog:openJson'),
   saveJson: (filePath, content) => ipcRenderer.invoke('fs:saveJson', filePath, content),
+
+  /**
+   * @param {string} path
+   * @returns {string}
+   */
+  normalizePath: (path) => normalize(path),
 
   /**
    * @param {string} action

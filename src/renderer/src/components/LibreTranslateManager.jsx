@@ -80,11 +80,20 @@ const detectOS = () => {
 // Security Sandbox Sanitizers (Anti-Command Injection)
 // ============================================================================
 
+/**
+ * @param {string} val
+ * @param {string} fallback
+ * @returns {string}
+ */
 const sanitizePath = (val, fallback) => {
-  if (!val || typeof val !== 'string') return fallback;
-  // Strips dangerous shell characters: ; & | ` $ ( ) { } < > ' " \n
-  const cleaned = val.replace(/[;&|`$(){}<>'"\n]/g, '').trim();
-  return cleaned || fallback;
+  if (!val || typeof val !== 'string' || !window.api || !window.api.normalizePath) return fallback;
+
+  const allowedCharsPattern = /[^a-zA-Z0-9.\-_/\\\s]/g;
+  const cleaned = val.replace(allowedCharsPattern, '').trim();
+
+  if (!cleaned) return fallback;
+
+  return window.api.normalizePath(cleaned);
 };
 
 const sanitizePort = (val) => {
