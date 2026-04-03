@@ -177,15 +177,25 @@ export default function Translator({ apiMode, config }) {
     try {
       // Assuming local LibreTranslate
       const res = await fetch(`${getBaseUrl('libre')}/languages`);
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
 
-      /** @type {boolean} */
-      const hasAuto = data.some((l) => l.code === 'auto');
-      if (!hasAuto) data.unshift({ code: 'auto', name: 'Auto Detect' });
+      // Strict validation against malformed API responses
+      if (!Array.isArray(data)) throw new Error('API Response is not an array');
 
-      setLibreLanguages(data);
-    } catch {
+      const safeData = data
+        .filter(
+          (l) =>
+            l && typeof l === 'object' && typeof l.code === 'string' && typeof l.name === 'string',
+        )
+        .map((l) => ({ code: l.code, name: l.name }));
+
+      const hasAuto = safeData.some((l) => l.code === 'auto');
+      if (!hasAuto) safeData.unshift({ code: 'auto', name: 'Auto Detect' });
+
+      setLibreLanguages(safeData);
+    } catch (err) {
+      console.warn('Failed to fetch LibreLanguages securely:', err);
       setLibreLanguages([]);
     }
   };
@@ -226,9 +236,18 @@ export default function Translator({ apiMode, config }) {
           headers: { 'Content-Type': 'application/json' },
           signal,
         });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const mainText = data.translatedText || '';
-        const alts = data.alternatives || [];
+
+        // Validation Sandbox
+        if (!data || typeof data !== 'object') throw new Error('Malformed LibreTranslate payload');
+
+        const mainText = typeof data.translatedText === 'string' ? data.translatedText : '';
+        const alts = Array.isArray(data.alternatives)
+          ? data.alternatives.filter((alt) => typeof alt === 'string')
+          : [];
+
         return {
           text: mainText,
           alts: mainText ? [mainText, ...alts] : [],
@@ -266,15 +285,38 @@ export default function Translator({ apiMode, config }) {
           headers: headers,
           signal,
         });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+
+        // Validation Sandbox
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !Array.isArray(data.choices) ||
+          data.choices.length === 0
+        ) {
+          throw new Error('Invalid OpenAI compatible API response format');
+        }
+
+        const firstChoice = data.choices[0];
+        if (
+          !firstChoice ||
+          typeof firstChoice !== 'object' ||
+          !firstChoice.message ||
+          typeof firstChoice.message.content !== 'string'
+        ) {
+          throw new Error('Malformed OpenAI message payload');
+        }
+
         return {
-          text: data.choices[0]?.message?.content || '',
+          text: firstChoice.message.content,
           alts: [],
         };
       }
     } catch (err) {
       if (err.name === 'AbortError') throw err;
-      console.error(err);
+      console.error('Translation validation error:', err);
       return null;
     }
   };

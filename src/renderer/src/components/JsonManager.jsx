@@ -267,6 +267,12 @@ export default function JsonManager({ executeSilentTranslation }) {
       if (result) {
         try {
           const parsed = JSON.parse(result.content);
+
+          // Sandbox: Ensures the root is actually an object or array, preventing primitive injections
+          if (!parsed || typeof parsed !== 'object') {
+            throw new Error('Invalid JSON structure. Root must be an object or an array.');
+          }
+
           const flat = flattenJson(parsed).map((item) => ({
             ...item,
             original: item.value,
@@ -274,6 +280,7 @@ export default function JsonManager({ executeSilentTranslation }) {
             selected: false,
             alts: [],
           }));
+
           setFilePath(result.filePath);
           setOriginalFlat(flat);
           setHistory([flat]);
@@ -282,8 +289,9 @@ export default function JsonManager({ executeSilentTranslation }) {
           setExcludedKeys(new Set());
           setRowHeights({});
           updateDimensions(setContainerHeight, setViewportHeight, containerRef);
-        } catch {
-          alert('Invalid JSON file.');
+        } catch (err) {
+          console.error(err);
+          alert('Invalid JSON file. The structure is malformed or not supported.');
         }
       }
     }

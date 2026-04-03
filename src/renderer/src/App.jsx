@@ -3,12 +3,82 @@ import Settings from './components/Settings';
 import Translator from './components/Translator';
 import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
 
+/**
+ * Validates and sanitizes the parsed configuration object to prevent injection or corruption.
+ * @param {any} parsed
+ * @returns {import('./components/Settings').SettingsParams}
+ */
+const sanitizeConfig = (parsed) => {
+  const safeConfig = {
+    libre: { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' },
+    openaic: { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' },
+    typingDelay: 1000,
+    lmLanguages: LM_HARDCODED_LANGUAGES,
+    theme: 'auto',
+  };
+
+  if (!parsed || typeof parsed !== 'object') return safeConfig;
+
+  // Libre Config Validation
+  if (parsed.libre && typeof parsed.libre === 'object') {
+    safeConfig.libre.protocol = parsed.libre.protocol === 'https' ? 'https' : 'http';
+    safeConfig.libre.ip =
+      typeof parsed.libre.ip === 'string'
+        ? parsed.libre.ip.replace(/[^a-zA-Z0-9.:-]/g, '').substring(0, 100)
+        : '127.0.0.1:5000';
+    safeConfig.libre.apiKey =
+      typeof parsed.libre.apiKey === 'string' ? parsed.libre.apiKey.substring(0, 200) : '';
+  }
+
+  // OpenAic Config Validation
+  if (parsed.openaic && typeof parsed.openaic === 'object') {
+    safeConfig.openaic.protocol = parsed.openaic.protocol === 'https' ? 'https' : 'http';
+    safeConfig.openaic.ip =
+      typeof parsed.openaic.ip === 'string'
+        ? parsed.openaic.ip.replace(/[^a-zA-Z0-9.:-]/g, '').substring(0, 100)
+        : '127.0.0.1:1234';
+    safeConfig.openaic.apiKey =
+      typeof parsed.openaic.apiKey === 'string' ? parsed.openaic.apiKey.substring(0, 200) : '';
+  }
+
+  // Primitives Validation
+  if (
+    typeof parsed.typingDelay === 'number' &&
+    parsed.typingDelay >= 0 &&
+    parsed.typingDelay <= 10000
+  ) {
+    safeConfig.typingDelay = parsed.typingDelay;
+  }
+
+  if (['auto', 'light', 'dark'].includes(parsed.theme)) {
+    safeConfig.theme = parsed.theme;
+  }
+
+  // Array Validation
+  if (Array.isArray(parsed.lmLanguages)) {
+    safeConfig.lmLanguages = parsed.lmLanguages
+      .filter(
+        (lang) =>
+          lang &&
+          typeof lang === 'object' &&
+          typeof lang.code === 'string' &&
+          typeof lang.name === 'string',
+      )
+      .map((lang) => ({
+        code: lang.code.substring(0, 20),
+        name: lang.name.substring(0, 50),
+      }));
+  }
+
+  return safeConfig;
+};
+
 export default function App() {
   /**
    * @returns {import('./components/Settings').SettingsParams}
    */
+  /** @type {string | null} */
   const getInitialConfig = () => {
-    /** @type {string | null} */
     const savedConfig = localStorage.getItem('appConfig');
     if (savedConfig) {
       try {
@@ -22,18 +92,12 @@ export default function App() {
           parsed.openaic = { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' };
         if (!parsed.libre.apiKey) parsed.libre.apiKey = '';
         if (!parsed.openaic.apiKey) parsed.openaic.apiKey = '';
-        return parsed;
+        return sanitizeConfig(parsed);
       } catch {
         // Fallback to default if JSON is corrupted
       }
     }
-    return {
-      libre: { protocol: 'http', ip: '127.0.0.1:5000', apiKey: '' },
-      openaic: { protocol: 'http', ip: '127.0.0.1:1234', apiKey: '' },
-      typingDelay: 1000,
-      lmLanguages: LM_HARDCODED_LANGUAGES,
-      theme: 'auto',
-    };
+    return sanitizeConfig({});
   };
 
   // UI State
@@ -49,25 +113,17 @@ export default function App() {
 
   // Theme Controller
   useEffect(() => {
-    /** @type {MediaQueryList} */
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    /**
-     * @returns {void}
-     */
     const applyTheme = () => {
       /** @type {string} */
       const resolvedTheme =
         config.theme === 'auto' ? (mediaQuery.matches ? 'dark' : 'light') : config.theme;
-
       document.documentElement.setAttribute('data-bs-theme', resolvedTheme);
     };
 
     applyTheme();
 
-    /**
-     * @returns {void}
-     */
     const handleChange = () => {
       if (config.theme === 'auto') applyTheme();
     };
