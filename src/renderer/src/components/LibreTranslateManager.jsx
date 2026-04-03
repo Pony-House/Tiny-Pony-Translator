@@ -202,6 +202,11 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           exit 1
     `;
 
+    // Config
+    const host = isPublic ? '0.0.0.0' : '127.0.0.1';
+    const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
+    const config = ` --host ${host} --port ${port} ${apiArg}`;
+
     if (action === 'install') {
       setIsProcessing(true);
       pushLocalLog('\x1b[36mStarting installation process...\x1b[0m');
@@ -221,7 +226,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
         source "${installPath}/bin/activate"
         pip install --upgrade pip
         pip install libretranslate
-        libretranslate ${loadOnlyEnv}
+        libretranslate${config}${loadOnlyEnv}
       `;
     } else if (action === 'update') {
       setIsProcessing(true);
@@ -237,12 +242,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
         source "${installPath}/bin/activate"
         pip install --upgrade pip
         pip install --upgrade libretranslate
-        libretranslate --update-models ${loadOnlyEnv}
+        libretranslate${config} --update-models ${loadOnlyEnv}
       `;
     } else if (action === 'start') {
       pushLocalLog('\x1b[36mStarting LibreTranslate instance...\x1b[0m');
-      const host = isPublic ? '0.0.0.0' : '127.0.0.1';
-      const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
 
       // Link creator (Part 2)
       linkCreator += `
@@ -252,7 +255,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       script = `
         ${linkCreator}
         source "${installPath}/bin/activate"
-        libretranslate --host ${host} --port ${port} ${apiArg}
+        libretranslate${config}
       `;
     }
 
