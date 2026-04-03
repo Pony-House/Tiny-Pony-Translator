@@ -138,7 +138,7 @@ export default function App() {
         style={{ zIndex: 10 }}
       >
         <div className="d-flex align-items-center gap-4">
-          <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
+          <h3 className="text-primary fw-bold mb-0">PonyTranslator</h3>
           <div className="btn-group shadow-sm">
             <button
               className={`btn ${view === 'translator' ? 'btn-primary' : 'btn-outline-primary'}`}
