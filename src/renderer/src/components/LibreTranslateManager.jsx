@@ -1,6 +1,70 @@
 import { useState, useEffect, useRef } from 'react';
 import Ansi from 'ansi-to-react';
 
+// ============================================================================
+// Global Cache & Listeners
+// These variables stay in memory across component mounts/unmounts, ensuring
+// background logs are never lost while the app is open.
+// ============================================================================
+let globalLogsCache = [];
+let logListeners = new Set();
+let isGlobalListenerAttached = false;
+
+/**
+ * Initializes the global log listener to capture backend messages in the background.
+ */
+const setupGlobalListener = () => {
+  if (isGlobalListenerAttached || !window.api || !window.api.onLibreTranslateLog) return;
+
+  window.api.onLibreTranslateLog((message) => {
+    const lines = message.split('\n');
+    let newLogs = [...globalLogsCache];
+
+    lines.forEach((line) => {
+      if (line.includes('\r')) {
+        const parts = line.split('\r');
+        const finalPart = parts[parts.length - 1];
+        if (finalPart.trim()) {
+          if (newLogs.length > 0) {
+            newLogs[newLogs.length - 1] = `[${new Date().toLocaleTimeString()}] ${finalPart}`;
+          } else {
+            newLogs.push(`[${new Date().toLocaleTimeString()}] ${finalPart}`);
+          }
+        }
+      } else if (line.trim()) {
+        newLogs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
+      }
+    });
+
+    if (newLogs.length > 500) newLogs = newLogs.slice(newLogs.length - 500);
+    globalLogsCache = newLogs;
+
+    // Notify all active React instances
+    logListeners.forEach((listener) => listener(globalLogsCache));
+  });
+
+  isGlobalListenerAttached = true;
+};
+
+/**
+ * Pushes a local log message to the global cache and updates listeners.
+ * @param {string} msg - The message to append to the log.
+ */
+const pushLocalLog = (msg) => {
+  let newLogs = [...globalLogsCache, `[${new Date().toLocaleTimeString()}] ${msg}`];
+  if (newLogs.length > 500) newLogs = newLogs.slice(newLogs.length - 500);
+  globalLogsCache = newLogs;
+  logListeners.forEach((listener) => listener(globalLogsCache));
+};
+
+/**
+ * Clears the global log cache.
+ */
+const clearGlobalLogs = () => {
+  globalLogsCache = [];
+  logListeners.forEach((listener) => listener(globalLogsCache));
+};
+
 /**
  * Component to manage the local installation and execution of LibreTranslate.
  * @param {Object} props - Component properties.
@@ -24,12 +88,11 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   // Process State and Logs
   const [isRunning, setIsRunning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [logs, setLogs] = useState([...globalLogsCache]);
   const logsEndRef = useRef(null);
 
   // Constants for Session IDs to prevent ghost instances
   const SERVER_SESSION_ID = 'libre-server';
-  const TASK_SESSION_ID = 'libre-task';
 
   // Save configurations to local cache
   useEffect(() => {
@@ -43,59 +106,37 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
 
   // Auto-scroll the logs container
   useEffect(() => {
-    if (logsEndRef.current) {
+    if (logsEndRef.current && isOpen) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [logs]);
+  }, [logs, isOpen]);
+
+  // Initialize Global Listener and Subscriptions
+  useEffect(() => {
+    setupGlobalListener();
+
+    // Subscribe to background log updates
+    const handleLogUpdate = (updatedLogs) => setLogs([...updatedLogs]);
+    logListeners.add(handleLogUpdate);
+
+    return () => logListeners.delete(handleLogUpdate);
+  }, []);
 
   // Check backend server status when the modal is opened
   useEffect(() => {
     const checkStatus = async () => {
       if (isOpen && window.api && window.api.getLibreServerStatus) {
         const status = await window.api.getLibreServerStatus(SERVER_SESSION_ID);
-        setIsRunning(status.isRunning);
-
-        // Also checks if there is any installation running in background
-        const taskStatus = await window.api.getLibreServerStatus(TASK_SESSION_ID);
-        setIsProcessing(taskStatus.isRunning);
+        if (status.isRunning) {
+          setIsRunning(true);
+        } else {
+          setIsRunning(false);
+          setIsProcessing(false);
+        }
       }
     };
     checkStatus();
   }, [isOpen]);
-
-  // Listener to capture logs from the backend (Main Process)
-  useEffect(() => {
-    if (window.api && window.api.onLibreTranslateLog) {
-      const removeListener = window.api.onLibreTranslateLog((message) => {
-        setLogs((prev) => {
-          // Handles carriage return (\r) characters used by Python progress bars
-          const lines = message.split('\n');
-          let newLogs = [...prev];
-
-          lines.forEach((line) => {
-            if (line.includes('\r')) {
-              // Replaces the last line if \r is present (typical of download progress bars)
-              const parts = line.split('\r');
-              const finalPart = parts[parts.length - 1];
-              if (finalPart.trim()) {
-                if (newLogs.length > 0) {
-                  newLogs[newLogs.length - 1] = `[${new Date().toLocaleTimeString()}] ${finalPart}`;
-                } else {
-                  newLogs.push(`[${new Date().toLocaleTimeString()}] ${finalPart}`);
-                }
-              }
-            } else if (line.trim()) {
-              newLogs.push(`[${new Date().toLocaleTimeString()}] ${line}`);
-            }
-          });
-
-          // Strictly limits to 500 logs to prevent React memory issues
-          return newLogs.length > 500 ? newLogs.slice(newLogs.length - 500) : newLogs;
-        });
-      });
-      return () => removeListener();
-    }
-  }, []);
 
   if (!isOpen) return null;
 
@@ -106,23 +147,17 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
    */
   const handleCommand = async (action) => {
     if (!window.api || !window.api.runLibreCommand) {
-      addLocalLog(
+      pushLocalLog(
         '\x1b[31mERROR: Electron API not found. Implement window.api.runLibreCommand in main.js\x1b[0m',
       );
       return;
     }
 
-    if (action === 'cancel') {
-      addLocalLog('\x1b[33mCanceling current operation...\x1b[0m');
-      await window.api.stopLibreCommand(TASK_SESSION_ID);
-      setIsProcessing(false);
-      return;
-    }
-
-    if (action === 'stop') {
-      addLocalLog('\x1b[33mSending stop signal to the server...\x1b[0m');
+    if (action === 'cancel' || action === 'stop') {
+      pushLocalLog('\x1b[33mSending stop signal to the active process...\x1b[0m');
       await window.api.stopLibreCommand(SERVER_SESSION_ID);
       setIsRunning(false);
+      setIsProcessing(false);
       return;
     }
 
@@ -156,12 +191,9 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           exit 1
     `;
 
-    // Determine which session ID to use for process tracking
-    const sessionId = action === 'start' ? SERVER_SESSION_ID : TASK_SESSION_ID;
-
     if (action === 'install') {
       setIsProcessing(true);
-      addLocalLog('\x1b[36mStarting installation process...\x1b[0m');
+      pushLocalLog('\x1b[36mStarting installation process...\x1b[0m');
 
       // Link creator (Part 2)
       linkCreator += `
@@ -182,7 +214,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       `;
     } else if (action === 'update') {
       setIsProcessing(true);
-      addLocalLog('\x1b[36mStarting update process...\x1b[0m');
+      pushLocalLog('\x1b[36mStarting update process...\x1b[0m');
 
       // Link creator (Part 2)
       linkCreator += `
@@ -197,7 +229,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
         libretranslate --update-models ${loadOnlyEnv}
       `;
     } else if (action === 'start') {
-      addLocalLog('\x1b[36mStarting LibreTranslate instance...\x1b[0m');
+      pushLocalLog('\x1b[36mStarting LibreTranslate instance...\x1b[0m');
       const host = isPublic ? '0.0.0.0' : '127.0.0.1';
       const apiArg = apiKey.trim() ? `--api-keys ${apiKey.trim()}` : '';
 
@@ -214,37 +246,21 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     }
 
     try {
-      // The backend should return when the script finishes (for install/update)
-      // For 'start', it runs in the background and resolves immediately.
-      await window.api.runLibreCommand(action, script, sessionId);
+      // Execute using the unified session ID
+      await window.api.runLibreCommand(action, script, SERVER_SESSION_ID);
 
+      // If the backend resolved immediately (e.g. start background task), we mark as running.
       if (action === 'start') {
         setIsRunning(true);
       }
     } catch (err) {
-      addLocalLog(`\x1b[31mFATAL ERROR: ${err.message}\x1b[0m`);
+      pushLocalLog(`\x1b[31mFATAL ERROR: ${err.message}\x1b[0m`);
     } finally {
+      // If it was install or update, the promise resolves when it's done.
+      // We can turn off processing state safely.
       if (action !== 'start') setIsProcessing(false);
     }
   };
-
-  /**
-   * Appends a local message to the logs.
-   * @param {string} msg - The message to add.
-   * @returns {void}
-   */
-  const addLocalLog = (msg) => {
-    setLogs((prev) => {
-      const next = [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`];
-      return next.length > 500 ? next.slice(next.length - 500) : next;
-    });
-  };
-
-  /**
-   * Clears all current logs.
-   * @returns {void}
-   */
-  const clearLogs = () => setLogs([]);
 
   return (
     <div
@@ -387,23 +403,14 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                     <i className="bi bi-arrow-clockwise me-1"></i>Update
                   </button>
 
-                  {/* If you are processing (installing/updating), display Cancel */}
-                  {isProcessing && !isRunning && (
-                    <button
-                      className="btn btn-warning fw-bold w-100 shadow-sm mt-2 text-dark"
-                      onClick={() => handleCommand('cancel')}
-                    >
-                      <i className="bi bi-x-circle me-1"></i>Cancel Process
-                    </button>
-                  )}
-
-                  {/* If the server is running, show Stop */}
-                  {isRunning && (
+                  {/* Shared button for both Canceling tasks and Stopping the server */}
+                  {(isProcessing || isRunning) && (
                     <button
                       className="btn btn-danger fw-bold w-100 shadow-sm mt-2"
                       onClick={() => handleCommand('stop')}
                     >
-                      <i className="bi bi-stop-circle me-1"></i>Stop Server
+                      <i className="bi bi-stop-circle me-1"></i>
+                      {isRunning ? 'Stop Server' : 'Cancel Process'}
                     </button>
                   )}
 
@@ -427,7 +434,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                   </span>
                   <div className="d-flex align-items-center gap-2">
                     <span className="badge bg-secondary">{logs.length} / 500 lines</span>
-                    <button className="btn btn-sm btn-outline-danger py-0 px-2" onClick={clearLogs}>
+                    <button
+                      className="btn btn-sm btn-outline-danger py-0 px-2"
+                      onClick={clearGlobalLogs}
+                    >
                       Clear
                     </button>
                   </div>
