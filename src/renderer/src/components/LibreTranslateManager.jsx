@@ -91,7 +91,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
   const [logs, setLogs] = useState([...globalLogsCache]);
   const logsEndRef = useRef(null);
 
-  // Constants for Session IDs to prevent ghost instances
+  // We unify the session ID so install/update/start all use the same tracking mechanism.
   const SERVER_SESSION_ID = 'libre-server';
 
   // Save configurations to local cache
@@ -127,11 +127,21 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     const checkStatus = async () => {
       if (isOpen && window.api && window.api.getLibreServerStatus) {
         const status = await window.api.getLibreServerStatus(SERVER_SESSION_ID);
+        const activeAction = localStorage.getItem('lt_activeAction');
+
         if (status.isRunning) {
-          setIsRunning(true);
+          // Determines if the running process is the server or an installation/update task
+          if (activeAction === 'start') {
+            setIsRunning(true);
+            setIsProcessing(false);
+          } else {
+            setIsRunning(false);
+            setIsProcessing(true);
+          }
         } else {
           setIsRunning(false);
           setIsProcessing(false);
+          localStorage.removeItem('lt_activeAction');
         }
       }
     };
@@ -158,6 +168,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       await window.api.stopLibreCommand(SERVER_SESSION_ID);
       setIsRunning(false);
       setIsProcessing(false);
+      localStorage.removeItem('lt_activeAction');
       return;
     }
 
@@ -246,6 +257,9 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     }
 
     try {
+      // Stores the current active action in local storage so it persists if modal closes
+      localStorage.setItem('lt_activeAction', action);
+
       // Execute using the unified session ID
       await window.api.runLibreCommand(action, script, SERVER_SESSION_ID);
 
@@ -257,8 +271,12 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       pushLocalLog(`\x1b[31mFATAL ERROR: ${err.message}\x1b[0m`);
     } finally {
       // If it was install or update, the promise resolves when it's done.
-      // We can turn off processing state safely.
-      if (action !== 'start') setIsProcessing(false);
+      // We can turn off processing state and clean up the active action safely.
+      // This will even run in the background if the component is unmounted!
+      if (action !== 'start') {
+        setIsProcessing(false);
+        localStorage.removeItem('lt_activeAction');
+      }
     }
   };
 
@@ -274,16 +292,26 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           className="modal-content bg-body text-body shadow-lg border-0 d-flex flex-column"
           style={{ height: 'calc(100vh - 4rem)' }}
         >
-          <div className="modal-header bg-body-tertiary border-bottom-0 flex-shrink-0">
-            <h5 className="modal-title fw-bold text-primary">
+          <div className="modal-header bg-body-tertiary border-bottom-0 flex-shrink-0 d-flex align-items-center">
+            <h5 className="modal-title fw-bold text-primary m-0">
               <i className="bi bi-translate me-2"></i>Local LibreTranslate Manager
             </h5>
-            <button
-              type="button"
-              className="btn-close"
-              onClick={onClose}
-              disabled={isProcessing && !isRunning}
-            ></button>
+            <div className="ms-auto d-flex align-items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-sm btn-link text-secondary p-0"
+                onClick={onClose}
+                title="Minimize window"
+              >
+                <i className="bi bi-dash-lg fs-5"></i>
+              </button>
+              <button
+                type="button"
+                className="btn-close"
+                onClick={onClose}
+                title="Close window"
+              ></button>
+            </div>
           </div>
 
           <div className="modal-body p-4 pt-2 d-flex flex-column flex-grow-1 overflow-hidden">
@@ -410,7 +438,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                       onClick={() => handleCommand('stop')}
                     >
                       <i className="bi bi-stop-circle me-1"></i>
-                      {isRunning ? 'Stop Server' : 'Cancel Process'}
+                      {isRunning ? 'Stop Server' : 'Stop Process'}
                     </button>
                   )}
 
