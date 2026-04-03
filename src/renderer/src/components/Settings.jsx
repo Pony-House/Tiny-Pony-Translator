@@ -1,5 +1,12 @@
 import { useRef, useState } from 'react';
-import { DEFAULT_LM_INSTRUCTION, DEFAULT_LM_AUTO_INSTRUCTION } from '../utils/defaultValues';
+import {
+  DEFAULT_LM_INSTRUCTION,
+  DEFAULT_LM_AUTO_INSTRUCTION,
+  DEFAULT_LM_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER,
+  DEFAULT_LM_INSTRUCTION_ORTH,
+  DEFAULT_LM_AUTO_INSTRUCTION_ORTH,
+} from '../utils/defaultValues';
 import LibreTranslateManager from './LibreTranslateManager';
 
 /**
@@ -32,9 +39,11 @@ import LibreTranslateManager from './LibreTranslateManager';
  */
 
 /**
+ * Component to manage the application's global settings.
  * @param {Object} options
  * @param {SettingsParams} options.config
  * @param {(ops: SettingsParams) => void} options.setConfig
+ * @returns {JSX.Element}
  */
 export default function Settings({ config, setConfig }) {
   const fileInputRef = useRef(null);
@@ -42,6 +51,7 @@ export default function Settings({ config, setConfig }) {
   const [isLibreManagerOpen, setIsLibreManagerOpen] = useState(false);
 
   /**
+   * Exports the current settings and all prompt configurations to a JSON file.
    * @returns {void}
    */
   const handleExport = () => {
@@ -49,9 +59,30 @@ export default function Settings({ config, setConfig }) {
     const exportData = {
       servers: config,
       prompts: {
-        lmInstruction: localStorage.getItem('lmInstruction') || DEFAULT_LM_INSTRUCTION,
-        lmAutoInstruction: localStorage.getItem('lmAutoInstruction') || DEFAULT_LM_AUTO_INSTRUCTION,
-        lmHeader: localStorage.getItem('lmHeader') || '',
+        promptMode: localStorage.getItem('promptMode') || 'standard',
+        standard: {
+          lmInstruction: localStorage.getItem('lmInstruction_standard') || DEFAULT_LM_INSTRUCTION,
+          lmAutoInstruction:
+            localStorage.getItem('lmAutoInstruction_standard') || DEFAULT_LM_AUTO_INSTRUCTION,
+          lmHeader: localStorage.getItem('lmHeader_standard') || '',
+        },
+        character: {
+          lmInstruction:
+            localStorage.getItem('lmInstruction_character') ||
+            DEFAULT_LM_INSTRUCTION_WITH_CHARACTER,
+          lmAutoInstruction:
+            localStorage.getItem('lmAutoInstruction_character') ||
+            DEFAULT_LM_AUTO_INSTRUCTION_WITH_CHARACTER,
+          lmHeader: localStorage.getItem('lmHeader_character') || '',
+        },
+        orthographic: {
+          lmInstruction:
+            localStorage.getItem('lmInstruction_orthographic') || DEFAULT_LM_INSTRUCTION_ORTH,
+          lmAutoInstruction:
+            localStorage.getItem('lmAutoInstruction_orthographic') ||
+            DEFAULT_LM_AUTO_INSTRUCTION_ORTH,
+          lmHeader: localStorage.getItem('lmHeader_orthographic') || '',
+        },
       },
     };
 
@@ -67,6 +98,7 @@ export default function Settings({ config, setConfig }) {
   };
 
   /**
+   * Imports settings and prompts from a selected JSON file.
    * @param {import('react').ChangeEvent<HTMLInputElement>} e
    * @returns {void}
    */
@@ -85,14 +117,48 @@ export default function Settings({ config, setConfig }) {
           setConfig(parsedData.servers);
         }
 
-        // Handle prompts directly to localStorage
+        // Handle prompt caches
         if (parsedData.prompts) {
-          if (parsedData.prompts.lmInstruction)
-            localStorage.setItem('lmInstruction', parsedData.prompts.lmInstruction);
-          if (parsedData.prompts.lmAutoInstruction)
-            localStorage.setItem('lmAutoInstruction', parsedData.prompts.lmAutoInstruction);
-          if (parsedData.prompts.lmHeader !== undefined)
-            localStorage.setItem('lmHeader', parsedData.prompts.lmHeader);
+          // Restore the active mode
+          if (parsedData.prompts.promptMode) {
+            localStorage.setItem('promptMode', parsedData.prompts.promptMode);
+          }
+
+          // Restore the new multi-profile structure
+          const modes = ['standard', 'character', 'orthographic'];
+          modes.forEach((mode) => {
+            if (parsedData.prompts[mode]) {
+              if (parsedData.prompts[mode].lmInstruction)
+                localStorage.setItem(
+                  `lmInstruction_${mode}`,
+                  parsedData.prompts[mode].lmInstruction,
+                );
+              if (parsedData.prompts[mode].lmAutoInstruction)
+                localStorage.setItem(
+                  `lmAutoInstruction_${mode}`,
+                  parsedData.prompts[mode].lmAutoInstruction,
+                );
+              if (parsedData.prompts[mode].lmHeader !== undefined)
+                localStorage.setItem(`lmHeader_${mode}`, parsedData.prompts[mode].lmHeader);
+            }
+          });
+
+          // Backward compatibility for older backup files that used the flat structure
+          if (parsedData.prompts.lmInstruction) {
+            localStorage.setItem('lmInstruction_standard', parsedData.prompts.lmInstruction);
+          }
+          if (parsedData.prompts.lmAutoInstruction) {
+            localStorage.setItem(
+              'lmAutoInstruction_standard',
+              parsedData.prompts.lmAutoInstruction,
+            );
+          }
+          if (
+            parsedData.prompts.lmHeader !== undefined &&
+            typeof parsedData.prompts.lmHeader === 'string'
+          ) {
+            localStorage.setItem('lmHeader_standard', parsedData.prompts.lmHeader);
+          }
         }
       } catch (err) {
         console.error('Invalid JSON file', err);
@@ -104,6 +170,7 @@ export default function Settings({ config, setConfig }) {
   };
 
   /**
+   * Updates a specific field of a language entry.
    * @param {number} index
    * @param {'code' | 'name'} field
    * @param {string} value
@@ -116,6 +183,7 @@ export default function Settings({ config, setConfig }) {
   };
 
   /**
+   * Adds a new empty language entry to the configuration.
    * @returns {void}
    */
   const addLanguage = () => {
@@ -123,6 +191,7 @@ export default function Settings({ config, setConfig }) {
   };
 
   /**
+   * Removes a language entry from the configuration.
    * @param {number} index
    * @returns {void}
    */
