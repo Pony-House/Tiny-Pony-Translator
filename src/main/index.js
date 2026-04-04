@@ -5,7 +5,7 @@ import { app, shell, BrowserWindow, Tray, Menu, ipcMain, dialog } from 'electron
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
-import icon from '../../resources/icon.png?asset';
+import icon from '../renderer/icon/512.png?asset';
 
 const activeProcesses = new Map();
 
@@ -172,7 +172,7 @@ app.whenReady().then(() => {
     tray = new Tray(icon);
   } catch {
     // Fallback if the build icon is not found during dev
-    tray = new Tray(join(__dirname, '../../resources/icon.png'));
+    tray = new Tray(join(__dirname, '../renderer/icon/512.png'));
   }
 
   const contextMenu = Menu.buildFromTemplate([

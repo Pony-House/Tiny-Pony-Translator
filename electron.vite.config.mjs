@@ -8,6 +8,7 @@ export default defineConfig({
   main: {},
   preload: {},
   renderer: {
+    publicDir: resolve('public'),
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
