@@ -531,33 +531,49 @@ export default function Translator({ apiMode, config }) {
   return (
     <>
       <div className="mb-3 position-relative d-flex justify-content-center align-items-center">
-        <div className="btn-group bg-body shadow-sm rounded">
+        <div className="btn-group bg-body shadow-sm rounded flex-wrap justify-content-center">
           <button
-            className={`btn btn-sm px-4 fw-bold ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+            className={`btn btn-sm px-3 px-md-4 fw-bold rounded-start ${inputMode === 'text' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
             onClick={() => setInputMode('text')}
           >
             Translate Text
           </button>
+
           {apiMode === 'libre' && (
             <button
-              className={`btn btn-sm px-4 fw-bold ${inputMode === 'file' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+              className={`btn btn-sm px-3 px-md-4 fw-bold ${inputMode === 'file' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
               onClick={() => setInputMode('file')}
             >
               Translate File
             </button>
           )}
+
           <button
-            className={`btn btn-sm px-4 fw-bold ${inputMode === 'json' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
+            className={`btn btn-sm px-3 px-md-4 fw-bold ${apiMode !== 'openaic' ? 'rounded-end' : 'rounded-md-0-end'} ${inputMode === 'json' ? 'btn-primary' : 'btn-outline-primary border-0'}`}
             onClick={() => setInputMode('json')}
           >
-            Translate JSON (BETA)
+            {/* Responsiveness trick: full text on desktop, short text on mobile */}
+            <span className="d-none d-sm-inline">Translate JSON (BETA)</span>
+            <span className="d-inline d-sm-none">JSON</span>
           </button>
+
+          {/* Prompt modal open button available only in OpenAiC - MOBILE ONLY */}
+          {apiMode === 'openaic' && (
+            <button
+              className="btn btn-sm px-3 fw-bold btn-outline-primary rounded-end border-0 d-md-none"
+              onClick={() => setShowPromptsModal(true)}
+              title="Edit AI Prompts"
+            >
+              <i className="bi bi-robot"></i>
+              <span className="ms-1">Prompts</span>
+            </button>
+          )}
         </div>
 
-        {/* Prompt modal open button available only in OpenAiC */}
+        {/* Prompt modal open button available only in OpenAiC - DESKTOP ONLY */}
         {apiMode === 'openaic' && (
           <button
-            className="btn btn-sm btn-outline-primary fw-bold position-absolute end-0 shadow-sm"
+            className="btn btn-sm btn-outline-primary fw-bold position-absolute end-0 shadow-sm d-none d-md-flex align-items-center"
             onClick={() => setShowPromptsModal(true)}
             title="Edit AI Prompts"
           >

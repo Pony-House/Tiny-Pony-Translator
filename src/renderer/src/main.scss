@@ -1,0 +1,20 @@
+// Import Bootstrap functions and variables if not already present
+@import "bootstrap/scss/functions";
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/mixins";
+/**
+ * Handles conditional rounding for the action button.
+ * Default: No right rounding (for mobile/md where another button might exist).
+ * Desktop (md+): Rounded-end enabled.
+ */
+.rounded-md-0-end {
+  // Mobile/Small screens: ensure the end is flat
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+
+  @include media-breakpoint-up(md) {
+    // Desktop: apply the standard rounded-end
+    border-top-right-radius: $btn-border-radius !important; // Using Bootstrap's variable
+    border-bottom-right-radius: $btn-border-radius !important;
+  }
+}
