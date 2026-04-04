@@ -13,6 +13,30 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 
+// ============================================================================
+// Single Instance Lock System
+// ============================================================================
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // If another instance is already running, close this one immediately
+  app.quit();
+  process.exit(0);
+}
+
+// When a second instance tries to open, focus the existing main window
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+// ============================================================================
+// IPC Handlers
+// ============================================================================
+
 ipcMain.handle('restart-app', () => {
   app.relaunch();
   app.exit();
