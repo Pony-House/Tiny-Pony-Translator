@@ -237,12 +237,25 @@ export default function Settings({ config, setConfig }) {
     setConfig({ ...config, lmLanguages: newLangs });
   };
 
+  const githubUrl = 'https://github.com/Pony-House/Tiny-Pony-Translator';
+  const gitClass =
+    'btn btn-outline-dark text-body fw-bold w-100 shadow-sm d-flex justify-content-center align-items-center';
+  const gitStyle = {
+    borderColor: 'var(--bs-border-color)',
+  };
+
+  const gitContent = (
+    <>
+      <i className="bi bi-github fs-5 me-2"></i>
+      <span>Contribute or Donate on GitHub</span>
+    </>
+  );
+
   /**
    * Opens the GitHub repository link.
    * @returns {void}
    */
   const handleOpenGitHub = () => {
-    const githubUrl = 'https://github.com/Pony-House/Tiny-Pony-Translator';
     if (isElectron && window.api.openExternal) {
       window.api.openExternal(githubUrl);
     } else {
@@ -404,16 +417,21 @@ export default function Settings({ config, setConfig }) {
 
               <h5 className="mb-3 border-top pt-3">About & Support</h5>
               <div className="d-flex flex-column gap-2 mb-2">
-                <button
-                  className="btn btn-outline-dark text-body fw-bold w-100 shadow-sm d-flex justify-content-center align-items-center"
-                  style={{
-                    borderColor: 'var(--bs-border-color)',
-                  }}
-                  onClick={handleOpenGitHub}
-                >
-                  <i className="bi bi-github fs-5 me-2"></i>
-                  <span>Contribute or Donate on GitHub</span>
-                </button>
+                {isElectron ? (
+                  <button className={gitClass} style={gitStyle} onClick={handleOpenGitHub}>
+                    {gitContent}
+                  </button>
+                ) : (
+                  <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={gitClass}
+                    style={gitStyle}
+                  >
+                    {gitContent}
+                  </a>
+                )}
                 <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>
                   Your support helps keep this project alive and growing!
                 </small>
