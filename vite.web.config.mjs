@@ -5,6 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   // Point the root directly to where the index.html lives
   root: 'src/renderer',
+
+  // Define the path to the public directory relative to the 'root'
+  publicDir: resolve(__dirname, './public'),
+
   plugins: [react()],
   resolve: {
     alias: {
