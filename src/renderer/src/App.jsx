@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Settings from './components/Settings';
 import Translator from './components/Translator';
 import { LM_HARDCODED_LANGUAGES } from './utils/defaultValues';
@@ -101,6 +101,8 @@ export default function App() {
   // UI State
   const [view, setView] = useState('translator'); // 'translator' or 'settings'
   const [apiMode, setApiMode] = useState('libre');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef(null);
 
   // Settings State
   const [config, setConfig] = useState(getInitialConfig);
@@ -108,6 +110,17 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('appConfig', JSON.stringify(config));
   }, [config]);
+
+  // Handle outside clicks to close the mobile dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target)) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Theme Controller
   useEffect(() => {
@@ -134,12 +147,14 @@ export default function App() {
     <div className="w-100 vh-100 bg-body-tertiary d-flex flex-column overflow-hidden transition-theme">
       {/* Navigation Header */}
       <nav
-        className="d-flex justify-content-between align-items-center p-3 border-bottom bg-body flex-shrink-0 shadow-sm"
+        className="d-flex justify-content-between align-items-center p-3 border-bottom bg-body flex-shrink-0 shadow-sm position-relative"
         style={{ zIndex: 10 }}
       >
-        <div className="d-flex align-items-center gap-4">
-          <h3 className="text-primary fw-bold mb-0">PonyTranslator</h3>
-          <div className="btn-group shadow-sm">
+        <div className="d-flex align-items-center gap-2 gap-md-4">
+          <h3 className="text-primary fw-bold mb-0">PonyTranslate</h3>
+
+          {/* Desktop Navigation Buttons */}
+          <div className="btn-group shadow-sm d-none d-md-flex">
             <button
               className={`btn ${view === 'translator' ? 'btn-primary' : 'btn-outline-primary'}`}
               onClick={() => setView('translator')}
@@ -155,33 +170,121 @@ export default function App() {
           </div>
         </div>
 
+        {/* Desktop API Mode Switch */}
         {view === 'translator' && (
-          <div className="btn-group" role="group">
+          <div className="btn-group d-none d-md-flex" role="group">
             <input
               type="radio"
               className="btn-check"
-              name="apiMode"
-              id="libreMode"
+              name="apiModeDesktop"
+              id="libreModeDesktop"
               checked={apiMode === 'libre'}
               onChange={() => setApiMode('libre')}
             />
-            <label className="btn btn-sm btn-outline-secondary" htmlFor="libreMode">
+            <label className="btn btn-sm btn-outline-secondary" htmlFor="libreModeDesktop">
               LibreTranslate
             </label>
 
             <input
               type="radio"
               className="btn-check"
-              name="apiMode"
-              id="lmMode"
+              name="apiModeDesktop"
+              id="lmModeDesktop"
               checked={apiMode === 'openaic'}
               onChange={() => setApiMode('openaic')}
             />
-            <label className="btn btn-sm btn-outline-secondary" htmlFor="lmMode">
+            <label className="btn btn-sm btn-outline-secondary" htmlFor="lmModeDesktop">
               OpenAi Compatible
             </label>
           </div>
         )}
+
+        {/* Mobile Dropdown Menu Toggle */}
+        <div className="d-md-none" ref={mobileMenuRef}>
+          <button
+            className="btn btn-outline-primary"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            <i className="bi bi-list fs-4"></i>
+          </button>
+
+          {isMobileMenuOpen && (
+            <div
+              className="dropdown-menu dropdown-menu-end show p-2 shadow-lg"
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: '10px',
+                zIndex: 1050,
+                minWidth: '220px',
+              }}
+            >
+              <button
+                className={`dropdown-item rounded mb-1 ${view === 'translator' ? 'active bg-primary text-white' : ''}`}
+                onClick={() => {
+                  setView('translator');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <i className="bi bi-translate me-2"></i>Translator
+              </button>
+              <button
+                className={`dropdown-item rounded ${view === 'settings' ? 'active bg-primary text-white' : ''}`}
+                onClick={() => {
+                  setView('settings');
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <i className="bi bi-gear-fill me-2"></i>Settings
+              </button>
+
+              {view === 'translator' && (
+                <>
+                  <hr className="dropdown-divider my-2" />
+                  <div className="px-2 pb-1 small text-muted fw-bold">API Mode</div>
+                  <div className="d-flex flex-column gap-1">
+                    <input
+                      type="radio"
+                      className="btn-check"
+                      name="apiModeMobile"
+                      id="libreModeMobile"
+                      checked={apiMode === 'libre'}
+                      onChange={() => {
+                        setApiMode('libre');
+                        setIsMobileMenuOpen(false);
+                      }}
+                    />
+                    <label
+                      className={`btn btn-sm w-100 text-start ${apiMode === 'libre' ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                      htmlFor="libreModeMobile"
+                    >
+                      <i className="bi bi-cloud-check me-2"></i>LibreTranslate
+                    </label>
+
+                    <input
+                      type="radio"
+                      className="btn-check"
+                      name="apiModeMobile"
+                      id="lmModeMobile"
+                      checked={apiMode === 'openaic'}
+                      onChange={() => {
+                        setApiMode('openaic');
+                        setIsMobileMenuOpen(false);
+                      }}
+                    />
+                    <label
+                      className={`btn btn-sm w-100 text-start ${apiMode === 'openaic' ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                      htmlFor="lmModeMobile"
+                    >
+                      <i className="bi bi-robot me-2"></i>OpenAi Compatible
+                    </label>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </nav>
 
       <main className="flex-grow-1 d-flex flex-column overflow-hidden p-3 p-md-4">
