@@ -1,3 +1,4 @@
-provider: generic
-url: https://example.com/auto-updates
+owner: Pony-House
+repo: Tiny-Pony-Translator
+provider: github
 updaterCacheDirName: tiny-pony-translator-updater
