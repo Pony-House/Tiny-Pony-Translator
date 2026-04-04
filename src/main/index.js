@@ -7,6 +7,9 @@ import { join } from 'path';
 import { is } from '@electron-toolkit/utils';
 import icon from '../renderer/icon/512.png?asset';
 
+/**
+ * @type {Map<string, ChildProcessWithoutNullStreams>}
+ */
 const activeProcesses = new Map();
 
 let mainWindow = null;
@@ -56,9 +59,10 @@ ipcMain.handle('get-libre-server-status', (event, sessionId) => {
 
 ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionId, osType) => {
   return new Promise((resolve, reject) => {
-    let cp;
-
-    const execScript = () => {
+    /**
+     * @param {ChildProcessWithoutNullStreams} cp
+     */
+    const execScript = (cp) => {
       activeProcesses.set(sessionId, cp);
 
       cp.stdout.on('data', (data) => {
@@ -90,12 +94,10 @@ ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionI
       // Write a temporary .bat file to completely avoid command line escaping issues
       const tempBatPath = join(os.tmpdir(), `libre-${sessionId}.bat`);
       writeFile(tempBatPath, scriptString, 'utf-8').then(() => {
-        cp = spawn('cmd.exe', ['/c', tempBatPath], { detached: false });
-        execScript();
+        execScript(spawn('cmd.exe', ['/c', tempBatPath], { detached: false }));
       }).catch(reject);
     } else {
-      cp = spawn('bash', ['-c', scriptString], { detached: true });
-      execScript();
+      execScript(spawn('bash', ['-c', scriptString], { detached: true }));
     }
   });
 });
