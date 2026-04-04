@@ -1,7 +1,7 @@
 // Import Bootstrap functions and variables if not already present
-@import "bootstrap/scss/functions";
-@import "bootstrap/scss/variables";
-@import "bootstrap/scss/mixins";
+@import 'bootstrap/scss/functions';
+@import 'bootstrap/scss/variables';
+@import 'bootstrap/scss/mixins';
 /**
  * Handles conditional rounding for the action button.
  * Default: No right rounding (for mobile/md where another button might exist).
