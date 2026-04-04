@@ -2,7 +2,7 @@
   "id": "tiny_pony_translator",
   "name": "Tiny Pony Translator",
   "short_name": "Pony-Translator",
-  "description": "A lightweight, robust, and open-source translation tool supporting LibreTranslate and OpenAI-compatible APIs.",
+  "description": "A lightweight and open-source translation tool supporting LibreTranslate and OpenAI-compatible APIs.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

@@ -2,7 +2,7 @@
   "name": "tiny-pony-translator",
   "productName": "Tiny Pony Translator",
   "version": "1.0.0",
-  "description": "A lightweight, robust, and open-source translation tool supporting LibreTranslate and OpenAI-compatible APIs.",
+  "description": "A lightweight and open-source translation tool supporting LibreTranslate and OpenAI-compatible APIs.",
   "main": "./out/main/index.js",
   "author": {
     "name": "Yasmin Seidel (JasminDreasond)",
