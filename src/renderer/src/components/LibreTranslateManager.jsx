@@ -229,64 +229,49 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
     const config = ` --host ${host} --port ${port} ${apiArg}`;
 
     if (osType === 'Windows') {
-      // PowerShell Script for Windows
-      const source = `${installPath}\\argos-translate`;
-      const target = `$env:USERPROFILE\\.local\\share\\argos-translate`;
+      // Windows CMD Script
+      // const source = `${installPath}\\argos-translate`;
+      // const targetDir = `%USERPROFILE%\\.local\\share`;
+      // const target = `${targetDir}\\argos-translate`;
 
-      let linkCreator = `
-        $PYTHONUNBUFFERED=1
-        $SOURCE = "${source}"
-        $TARGET = "${target}"
+      const pyExe = `${installPath}\\Scripts\\python.exe`;
+      const ltExe = `${installPath}\\Scripts\\libretranslate.exe`;
 
-        if (-not (Test-Path "$TARGET" -PathType Container)) {
-          New-Item -ItemType Directory -Force -Path (Split-Path $TARGET) | Out-Null
-        }
-
-        if (Test-Path -Path $TARGET) {
-            $link = Get-Item -Path $TARGET
-            if ($link.LinkType) {
-                if ($link.Target -eq $SOURCE) {
-                    Write-Host "Skipping: The link already exists and points to the correct location."
-                } else {
-                    Write-Error "Error: A link already exists at '$TARGET' but points to '$($link.Target)' instead of '$SOURCE'."
-                    exit 1
-                }
-            } else {
-                Write-Error "Error: '$TARGET' exists and is a regular directory, not a link."
-                exit 1
-            }
-        }
+      // Base CMD logic to check and create directories/links
+      let cmdCreator = `
+        @echo off
+        set PYTHONUNBUFFERED=1
       `;
+      /**
+       * IF NOT EXIST "${targetDir}" mkdir "${targetDir}"
+       *
+       * IF EXIST "${target}" (
+       *    echo Skipping: The link or directory already exists.
+       * ) ELSE (
+       *    mklink /J "${target}" "${source}"
+       *    echo Success: Directory Junction created successfully.
+       * )
+       */
 
       if (action === 'install') {
-        linkCreator += `
-        else {
-            New-Item -ItemType SymbolicLink -Path $TARGET -Target $SOURCE | Out-Null
-            Write-Host "Success: Symbolic link created successfully."
-        }
-        `;
         return `
-          New-Item -ItemType Directory -Force -Path "${installPath}\\argos-translate" | Out-Null
-          ${linkCreator}
-          & "${pythonPath}" -m venv "${installPath}"
-          & "${installPath}\\Scripts\\activate.ps1"
-          python -m pip install --upgrade pip
-          pip install libretranslate
-          libretranslate${config}${loadOnlyEnv}
+          ${cmdCreator}
+          "${pythonPath}" -m venv "${installPath}"
+          "${pyExe}" -m pip install --upgrade pip
+          "${pyExe}" -m pip install libretranslate
+          "${ltExe}" ${config}${loadOnlyEnv}
         `;
       } else if (action === 'update') {
         return `
-          ${linkCreator}
-          & "${installPath}\\Scripts\\activate.ps1"
-          python -m pip install --upgrade pip
-          pip install --upgrade libretranslate
-          libretranslate${config} --update-models ${loadOnlyEnv}
+          ${cmdCreator}
+          "${pyExe}" -m pip install --upgrade pip
+          "${pyExe}" -m pip install --upgrade libretranslate
+          "${ltExe}" ${config} --update-models ${loadOnlyEnv}
         `;
       } else if (action === 'start') {
         return `
-          ${linkCreator}
-          & "${installPath}\\Scripts\\activate.ps1"
-          libretranslate${config}
+          ${cmdCreator}
+          "${ltExe}" ${config}
         `;
       }
     } else {
@@ -474,8 +459,10 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                       Environment Setup
                     </h6>
 
-                    <div className="mb-2">
-                      <label className="form-label small fw-bold">Python Executable</label>
+                    <div className="mb-3">
+                      <label className="form-label small fw-bold">
+                        Base Python (For Venv Creation)
+                      </label>
                       <input
                         type="text"
                         className="form-control form-control-sm"
@@ -488,9 +475,16 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                         onChange={(e) => setPythonPath(e.target.value)}
                         disabled={isRunning || isProcessing}
                       />
+                      <small
+                        className="text-muted d-block mt-1"
+                        style={{ fontSize: '0.7rem', lineHeight: '1.2' }}
+                      >
+                        This executable is only used during the installation phase to build the
+                        isolated virtual environment.
+                      </small>
                     </div>
 
-                    <div className="mb-2">
+                    <div className="mb-3">
                       <label className="form-label small fw-bold">
                         Installation Directory (venv)
                       </label>
@@ -501,6 +495,15 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
                         onChange={(e) => setInstallPath(e.target.value)}
                         disabled={isRunning || isProcessing}
                       />
+                      <small
+                        className="text-muted d-block mt-1"
+                        style={{ fontSize: '0.7rem', lineHeight: '1.2' }}
+                      >
+                        <strong>Active Executable:</strong>{' '}
+                        {osType === 'Windows'
+                          ? `${installPath}\\Scripts\\libretranslate.exe`
+                          : `${installPath}/bin/libretranslate`}
+                      </small>
                     </div>
 
                     <div className="mb-2">

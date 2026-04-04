@@ -55,43 +55,47 @@ ipcMain.handle('get-libre-server-status', (event, sessionId) => {
 });
 
 ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionId, osType) => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let cp;
+
+    const execScript = () => {
+      activeProcesses.set(sessionId, cp);
+
+      cp.stdout.on('data', (data) => {
+        event.sender.send('libre-log', data.toString().trim());
+      });
+
+      cp.stderr.on('data', (data) => {
+        event.sender.send('libre-log', data.toString().trim());
+      });
+
+      cp.on('close', (code) => {
+        event.sender.send('libre-log', `Process [${sessionId}] finished with code ${code}`);
+        activeProcesses.delete(sessionId);
+        if (action !== 'start') {
+          resolve();
+        }
+      });
+
+      // Resolve immediately for the interface to know it is running
+      if (action === 'start') {
+        resolve();
+      }
+    };
 
     // Detects whether it's Windows to run with PowerShell, or it goes from bash
     const isWindows = os.platform() === 'win32' || osType === 'Windows';
 
     if (isWindows) {
-      // In Windows, creating an isolated group of processes (detached) works differently.
-      // PowerShell can run block scripts by passing them as '-Command'
-      cp = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', scriptString], {
-        detached: true,
-      });
+      // Write a temporary .bat file to completely avoid command line escaping issues
+      const tempBatPath = join(os.tmpdir(), `libre-${sessionId}.bat`);
+      writeFile(tempBatPath, scriptString, 'utf-8').then(() => {
+        cp = spawn('cmd.exe', ['/c', tempBatPath], { detached: false });
+        execScript();
+      }).catch(reject);
     } else {
       cp = spawn('bash', ['-c', scriptString], { detached: true });
-    }
-
-    activeProcesses.set(sessionId, cp);
-
-    cp.stdout.on('data', (data) => {
-      event.sender.send('libre-log', data.toString().trim());
-    });
-
-    cp.stderr.on('data', (data) => {
-      event.sender.send('libre-log', data.toString().trim());
-    });
-
-    cp.on('close', (code) => {
-      event.sender.send('libre-log', `Process [${sessionId}] finished with code ${code}`);
-      activeProcesses.delete(sessionId);
-      if (action !== 'start') {
-        resolve();
-      }
-    });
-
-    // Resolve immediately for the interface to know it is running
-    if (action === 'start') {
-      resolve();
+      execScript();
     }
   });
 });
