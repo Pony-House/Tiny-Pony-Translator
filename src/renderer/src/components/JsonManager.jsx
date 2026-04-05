@@ -1272,6 +1272,12 @@ export default function JsonManager({ executeSilentTranslation }) {
                     placeholder="Key name..."
                     value={newCustomKey}
                     onChange={(e) => setNewCustomKey(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomKeyHeight();
+                      }
+                    }}
                   />
                   <input
                     type="number"
@@ -1279,6 +1285,12 @@ export default function JsonManager({ executeSilentTranslation }) {
                     style={{ width: '70px' }}
                     value={newCustomHeight}
                     onChange={(e) => setNewCustomHeight(Number(e.target.value) || 100)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCustomKeyHeight();
+                      }
+                    }}
                   />
                   <button className="btn btn-sm btn-success fw-bold" onClick={addCustomKeyHeight}>
                     +
