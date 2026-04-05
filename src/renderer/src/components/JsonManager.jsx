@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import TinyTextDiffer from 'tiny-essentials/libs/TinyTextDiffer';
 import { isElectron } from '../utils/values';
 
 /**
@@ -187,6 +188,15 @@ export default function JsonManager({ executeSilentTranslation }) {
   // Heights menu state
   const [newCustomKey, setNewCustomKey] = useState('');
   const [newCustomHeight, setNewCustomHeight] = useState(100);
+
+  /** @type {[string | number, React.Dispatch<React.SetStateAction<string | number>>]} */
+  const [compareHeight, setCompareHeight] = useState('100%');
+
+  /** @type {[TinyTextDiffer, React.Dispatch<React.SetStateAction<TinyTextDiffer>>]} */
+  const [diffEditor, setDiffEditor] = useState(new TinyTextDiffer(['', '']));
+
+  /** @type {React.MutableRefObject<HTMLTextAreaElement | null>} */
+  const compareRef = useRef(null);
 
   /**
    * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean, alts: string[]}>}
@@ -1026,6 +1036,62 @@ export default function JsonManager({ executeSilentTranslation }) {
   const visibleCount = Math.ceil(viewportHeight / 50) + 10;
   const visibleItems = visibleRows.slice(startIndex, startIndex + visibleCount);
 
+  // =====================================================================================
+  // RESIZEOBSERVER LOOP
+  // =====================================================================================
+  useEffect(() => {
+    if (!compareItemData) return;
+
+    /** @type {HTMLTextAreaElement | null} */
+    const textarea = compareRef.current;
+    if (!textarea) return;
+
+    let animationFrameId;
+
+    /** @type {ResizeObserver} */
+    const observer = new ResizeObserver((entries) => {
+      // Usando requestAnimationFrame para evitar o erro "ResizeObserver loop limit exceeded"
+      animationFrameId = requestAnimationFrame(() => {
+        for (let entry of entries) {
+          // Usar borderBoxSize é mais seguro e direto do que offsetHeight
+          const newHeight = entry.borderBoxSize
+            ? entry.borderBoxSize[0].blockSize
+            : entry.target.offsetHeight;
+
+          setCompareHeight((prev) => {
+            const prevHeight = typeof prev === 'number' ? prev : 0;
+            // 2px threshold: A zona morta que quebra qualquer loop infinito de sub-pixels causado pelo flexbox
+            if (Math.abs(prevHeight - newHeight) > 2) {
+              return newHeight;
+            }
+            return prev;
+          });
+        }
+      });
+    });
+
+    observer.observe(textarea);
+
+    return () => {
+      observer.disconnect();
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [compareItemData]); // Now reacts perfectly to modal opening and closing
+  // =====================================================================================
+
+  useEffect(() => {
+    setDiffEditor(
+      new TinyTextDiffer(
+        compareItemData
+          ? [
+              String(compareItemData.original),
+              compareItemData.isString ? compareItemData.value : String(compareItemData.value),
+            ]
+          : ['', ''],
+      ),
+    );
+  }, [compareItemData]);
+
   useEffect(() => {
     // Calculate immediately
     const updateDimensionsNow = () =>
@@ -1619,25 +1685,38 @@ export default function JsonManager({ executeSilentTranslation }) {
                 ></button>
               </div>
               <div className="modal-body row g-3">
-                <div className="col-6">
+                <div className="col-6 pb-3">
                   <label className="form-label fw-bold text-danger">Original Version</label>
-                  <textarea
+                  <div
                     className="form-control bg-danger-subtle text-danger"
-                    rows="5"
-                    readOnly
-                    value={String(compareItemData.original)}
-                  />
+                    style={{
+                      height:
+                        typeof compareHeight === 'number' ? `${compareHeight}px` : compareHeight,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {diffEditor.get(0)
+                      ? diffEditor
+                          .compare(0, 1)[0]
+                          .filter((result) => result.type === 'deleted' || result.type === 'normal')
+                          .map((result, index) => (
+                            <span
+                              key={index}
+                              className={result.type === 'deleted' ? 'text-danger' : 'text-body'}
+                            >
+                              {result.value}
+                            </span>
+                          ))
+                      : ''}
+                  </div>
                 </div>
-                <div className="col-6">
+                <div className="col-6 pb-3">
                   <label className="form-label fw-bold text-success">Edited Version (Live)</label>
                   <textarea
                     className="form-control bg-success-subtle text-success border-success"
-                    rows="5"
-                    value={
-                      compareItemData.isString
-                        ? compareItemData.value
-                        : String(compareItemData.value)
-                    }
+                    style={{ minHeight: '150px', overflowY: 'auto', resize: 'vertical' }}
+                    ref={compareRef}
+                    value={diffEditor.history[1]}
                     onChange={(e) => {
                       let val = e.target.value;
                       if (!compareItemData.isString) {
