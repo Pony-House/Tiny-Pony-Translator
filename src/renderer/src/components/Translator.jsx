@@ -411,6 +411,19 @@ export default function Translator({ apiMode, config }) {
   };
 
   /**
+   * Clear the field on the right when changing the target language.
+   * @param {string} value
+   * @returns {void}
+   */
+  const handleTargetChange = (value) => {
+    setTargetLang(value);
+    setTranslatedText('');
+    setTranslationOptions([]);
+    setSelectedOptionIndex(0);
+    setTranslationError('');
+  };
+
+  /**
    * @param {import('react').ChangeEvent<HTMLInputElement>} e
    * @returns {Promise<void>}
    */
@@ -659,7 +672,7 @@ export default function Translator({ apiMode, config }) {
                     className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
                     disabled={isLibreEmpty}
                     value={targetLang}
-                    onChange={(e) => setTargetLang(e.target.value)}
+                    onChange={(e) => handleTargetChange(e.target.value)}
                   >
                     {isLibreEmpty ? (
                       <option>Empty</option>
@@ -793,7 +806,7 @@ export default function Translator({ apiMode, config }) {
                       className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
                       disabled={isLibreEmpty}
                       value={targetLang}
-                      onChange={(e) => setTargetLang(e.target.value)}
+                      onChange={(e) => handleTargetChange(e.target.value)}
                     >
                       {isLibreEmpty ? (
                         <option>Empty</option>
