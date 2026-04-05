@@ -282,7 +282,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       const target = `$HOME/.local/share/argos-translate`;
 
       // Link creator script (Part 1)
-      let linkCreator = `
+      const linkCreator = `
         # Forces Python to output logs in real-time (disables buffering)
         export PYTHONUNBUFFERED=1
 
@@ -306,17 +306,13 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
             # The path exists but is NOT a symbolic link (it's a real file or folder)
             echo -e "\\e[31mError: '$TARGET' exists and is a regular file/directory, not a link.\\e[0m" >&2
             exit 1
-      `;
-
-      if (action === 'install') {
-        // Link creator (Part 2)
-        linkCreator += `
         else
             ln -s "$SOURCE" "$TARGET"
             echo -e "\\e[32mSuccess: Symbolic link created successfully.\\e[0m"
-        fi`;
+        fi
+      `;
 
-        // Command
+      if (action === 'install') {
         return `
           mkdir -p "${installPath}/argos-translate"
           ${linkCreator}
@@ -327,11 +323,6 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           libretranslate${config}${loadOnlyEnv}
         `;
       } else if (action === 'update') {
-        // Link creator (Part 2)
-        linkCreator += `
-          fi`;
-
-        // Command
         return `
           ${linkCreator}
           source "${installPath}/bin/activate"
@@ -340,11 +331,6 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
           libretranslate${config} --update-models ${loadOnlyEnv}
         `;
       } else if (action === 'start') {
-        // Link creator (Part 2)
-        linkCreator += `
-        fi`;
-
-        // Command
         return `
           ${linkCreator}
           source "${installPath}/bin/activate"
