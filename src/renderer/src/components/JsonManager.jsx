@@ -190,13 +190,19 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [newCustomHeight, setNewCustomHeight] = useState(100);
 
   /** @type {[string | number, React.Dispatch<React.SetStateAction<string | number>>]} */
-  const [compareHeight, setCompareHeight] = useState('100%');
+  const [compareHeight, setCompareHeight] = useState(() => {
+    const saved = localStorage.getItem('jsonManager_diffHeight');
+    return saved ? parseInt(saved, 10) : 150;
+  });
 
   /** @type {[TinyTextDiffer, React.Dispatch<React.SetStateAction<TinyTextDiffer>>]} */
   const [diffEditor, setDiffEditor] = useState(new TinyTextDiffer(['', '']));
 
   /** @type {React.MutableRefObject<HTMLTextAreaElement | null>} */
   const compareRef = useRef(null);
+
+  /** @type {React.MutableRefObject<HTMLDivElement | null>} */
+  const originalScrollRef = useRef(null);
 
   /**
    * @type {Array<{path: string, value: any, original: any, isString: boolean, isEdited: boolean, selected: boolean, alts: string[]}>}
@@ -230,6 +236,16 @@ export default function JsonManager({ executeSilentTranslation }) {
   useEffect(() => {
     localStorage.setItem('jsonManager_customHeights', JSON.stringify(customKeyHeights));
   }, [customKeyHeights]);
+
+  // Persist diff modal height using a debounce to save performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof compareHeight === 'number') {
+        localStorage.setItem('jsonManager_diffHeight', compareHeight.toString());
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [compareHeight]);
 
   useEffect(() => {
     if (filePath) sessionStorage.setItem('json_filePath', filePath);
@@ -1050,17 +1066,17 @@ export default function JsonManager({ executeSilentTranslation }) {
 
     /** @type {ResizeObserver} */
     const observer = new ResizeObserver((entries) => {
-      // Usando requestAnimationFrame para evitar o erro "ResizeObserver loop limit exceeded"
+      // Using requestAnimationFrame to avoid error "ResizeObserver loop limit exceeded"
       animationFrameId = requestAnimationFrame(() => {
         for (let entry of entries) {
-          // Usar borderBoxSize é mais seguro e direto do que offsetHeight
+          // Using borderBoxSize is safer and more direct than offsetHeight
           const newHeight = entry.borderBoxSize
             ? entry.borderBoxSize[0].blockSize
             : entry.target.offsetHeight;
 
           setCompareHeight((prev) => {
-            const prevHeight = typeof prev === 'number' ? prev : 0;
-            // 2px threshold: A zona morta que quebra qualquer loop infinito de sub-pixels causado pelo flexbox
+            const prevHeight = typeof prev === 'number' ? prev : 150;
+            // 2px threshold: A dead zone that has an infinite loop of sub-pixels caused by flexbox
             if (Math.abs(prevHeight - newHeight) > 2) {
               return newHeight;
             }
@@ -1688,6 +1704,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                 <div className="col-6 pb-3">
                   <label className="form-label fw-bold text-danger">Original Version</label>
                   <div
+                    ref={originalScrollRef}
                     className="form-control bg-danger-subtle text-danger"
                     style={{
                       height:
@@ -1714,9 +1731,28 @@ export default function JsonManager({ executeSilentTranslation }) {
                   <label className="form-label fw-bold text-success">Edited Version (Live)</label>
                   <textarea
                     className="form-control bg-success-subtle text-success border-success"
-                    style={{ minHeight: '150px', overflowY: 'auto', resize: 'vertical' }}
+                    style={{
+                      height: typeof compareHeight === 'number' ? `${compareHeight}px` : '150px',
+                      minHeight: '150px',
+                      overflowY: 'auto',
+                      resize: 'vertical',
+                    }}
                     ref={compareRef}
                     value={diffEditor.history[1]}
+                    onScroll={(e) => {
+                      if (originalScrollRef.current) {
+                        const target = e.target;
+                        const percentage =
+                          target.scrollTop / (target.scrollHeight - target.clientHeight);
+
+                        if (!isNaN(percentage)) {
+                          const orig = originalScrollRef.current;
+                          orig.scrollTop = percentage * (orig.scrollHeight - orig.clientHeight);
+                        } else {
+                          originalScrollRef.current.scrollTop = target.scrollTop;
+                        }
+                      }
+                    }}
                     onChange={(e) => {
                       let val = e.target.value;
                       if (!compareItemData.isString) {
