@@ -88,7 +88,7 @@ const detectOS = () => {
 const sanitizePath = (val, fallback) => {
   if (!val || typeof val !== 'string' || !window.api || !window.api.normalizePath) return fallback;
 
-  const allowedCharsPattern = /[^a-zA-Z0-9.\-_/\\\s]/g;
+  const allowedCharsPattern = /[^a-zA-Z0-9.\-_/\\:\s]/g;
   const cleaned = val.replace(allowedCharsPattern, '').trim();
 
   if (!cleaned) return fallback;
