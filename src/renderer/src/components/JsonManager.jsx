@@ -186,6 +186,7 @@ export default function JsonManager({ executeSilentTranslation }) {
   const [newKeyType, setNewKeyType] = useState('string');
 
   // Heights menu state
+  const customKeyRef = useRef(null);
   const [newCustomKey, setNewCustomKey] = useState('');
   const [newCustomHeight, setNewCustomHeight] = useState(100);
 
@@ -1271,6 +1272,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                     className="form-control form-control-sm"
                     placeholder="Key name..."
                     value={newCustomKey}
+                    ref={customKeyRef}
                     onChange={(e) => setNewCustomKey(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -1289,6 +1291,7 @@ export default function JsonManager({ executeSilentTranslation }) {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         addCustomKeyHeight();
+                        if (customKeyRef.current) customKeyRef.current.focus();
                       }
                     }}
                   />
