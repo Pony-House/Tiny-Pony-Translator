@@ -93,9 +93,11 @@ ipcMain.handle('run-libre-command', async (event, action, scriptString, sessionI
     if (isWindows) {
       // Write a temporary .bat file to completely avoid command line escaping issues
       const tempBatPath = join(os.tmpdir(), `libre-${sessionId}.bat`);
-      writeFile(tempBatPath, scriptString, 'utf-8').then(() => {
-        execScript(spawn('cmd.exe', ['/c', tempBatPath], { detached: false }));
-      }).catch(reject);
+      writeFile(tempBatPath, scriptString, 'utf-8')
+        .then(() => {
+          execScript(spawn('cmd.exe', ['/c', tempBatPath], { detached: false }));
+        })
+        .catch(reject);
     } else {
       execScript(spawn('bash', ['-c', scriptString], { detached: true }));
     }

@@ -234,7 +234,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       // Fix python utf8 issues
       ['PYTHONUTF8', '1'],
     ];
-    
+
     if (osType === 'Windows') {
       // Windows CMD Script
       // const source = `${installPath}\\argos-translate`;
@@ -247,7 +247,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
       // Base CMD logic to check and create directories/links
       let cmdCreator = `
         @echo off
-        ${pythonVars.map(str => `set ${str[0]}=${str[1]}`).join('\n')}
+        ${pythonVars.map((str) => `set ${str[0]}=${str[1]}`).join('\n')}
       `;
       /**
        * IF NOT EXIST "${targetDir}" mkdir "${targetDir}"
@@ -290,7 +290,7 @@ export default function LibreTranslateManager({ isOpen, onClose }) {
 
       // Link creator script (Part 1)
       const linkCreator = `
-        ${pythonVars.map(str => `export ${str[0]}=${str[1]}`).join('\n')}
+        ${pythonVars.map((str) => `export ${str[0]}=${str[1]}`).join('\n')}
 
         # Define source and target paths
         SOURCE="${source}"

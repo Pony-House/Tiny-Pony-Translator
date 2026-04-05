@@ -56,6 +56,9 @@ export default function Translator({ apiMode, config }) {
   const [targetLang, setTargetLang] = useState(getDefaultTargetLang);
   const [libreLanguages, setLibreLanguages] = useState([]);
 
+  // Auto-Detect State
+  const [detectedLangInfo, setDetectedLangInfo] = useState(null);
+
   // Alternatives State
   const [translationOptions, setTranslationOptions] = useState(() => {
     /** @type {string | null} */
@@ -215,7 +218,7 @@ export default function Translator({ apiMode, config }) {
   /**
    * @param {string} textToTranslate
    * @param {AbortSignal} signal
-   * @returns {Promise<{text: string, alts: string[]}|null>}
+   * @returns {Promise<{text: string, alts: string[], detectedLanguage?: {language: string, confidence: number}}|null>}
    */
   const executeSilentTranslation = async (textToTranslate, signal) => {
     if (!textToTranslate.trim()) return null;
@@ -259,9 +262,17 @@ export default function Translator({ apiMode, config }) {
           ? data.alternatives.filter((alt) => typeof alt === 'string')
           : [];
 
+        const detectedLanguage =
+          data.detectedLanguage &&
+          typeof data.detectedLanguage.language === 'string' &&
+          typeof data.detectedLanguage.confidence === 'number'
+            ? data.detectedLanguage
+            : null;
+
         return {
           text: mainText,
           alts: mainText ? [mainText, ...alts] : [],
+          detectedLanguage,
         };
       } else {
         let systemPrompt = '';
@@ -333,6 +344,7 @@ export default function Translator({ apiMode, config }) {
         return {
           text: firstChoice.message.content,
           alts: [],
+          detectedLanguage: null,
         };
       }
     } catch (err) {
@@ -351,6 +363,7 @@ export default function Translator({ apiMode, config }) {
       setTranslatedText('');
       setTranslationOptions([]);
       setTranslationError('');
+      setDetectedLangInfo(null);
       return;
     }
 
@@ -362,12 +375,14 @@ export default function Translator({ apiMode, config }) {
       setTranslatedText(result?.text || '');
       setTranslationOptions(result?.alts || []);
       setSelectedOptionIndex(0);
+      setDetectedLangInfo(result?.detectedLanguage || null);
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('Translation error:', err);
       setTranslationError(err.message || 'Connection failed.');
       setTranslatedText('');
       setTranslationOptions([]);
+      setDetectedLangInfo(null);
     } finally {
       setIsTranslating(false);
     }
@@ -383,6 +398,7 @@ export default function Translator({ apiMode, config }) {
     if (value.trim() === '') {
       setTranslationOptions([]);
       setTranslatedText('');
+      setDetectedLangInfo(null);
     }
 
     if (apiMode === 'libre' && libreLanguages.length > 0) {
@@ -491,6 +507,7 @@ export default function Translator({ apiMode, config }) {
     setTranslatedText(sourceText);
     setTranslationOptions([]);
     setSelectedOptionIndex(0);
+    setDetectedLangInfo(null);
   };
 
   /**
@@ -519,6 +536,27 @@ export default function Translator({ apiMode, config }) {
     setTranslatedText('');
     setTranslationOptions([]);
     setSelectedOptionIndex(0);
+    setDetectedLangInfo(null);
+  };
+
+  /**
+   * Generates a dynamic display name if the language was automatically detected.
+   * @param {Object} l - Language object
+   * @returns {string} Formatted display string
+   */
+  const getLanguageDisplayName = (l) => {
+    if (l.code === 'auto' && sourceLang === 'auto' && detectedLangInfo) {
+      const dName =
+        currentLanguages.find((cl) => cl.code === detectedLangInfo.language)?.name ||
+        detectedLangInfo.language;
+
+      let conf = detectedLangInfo.confidence || 0;
+      // Normalizes 0..1 to percentage if needed
+      if (conf <= 1 && conf > 0) conf = conf * 100;
+
+      return `${dName} (${Math.round(conf)}%) Auto Detect`;
+    }
+    return l.name;
   };
 
   /** @type {boolean} */
@@ -592,14 +630,17 @@ export default function Translator({ apiMode, config }) {
                   className="form-select border-0 fw-bold text-primary w-auto bg-body text-body"
                   disabled={isLibreEmpty}
                   value={sourceLang}
-                  onChange={(e) => setSourceLang(e.target.value)}
+                  onChange={(e) => {
+                    setSourceLang(e.target.value);
+                    setDetectedLangInfo(null);
+                  }}
                 >
                   {isLibreEmpty ? (
                     <option>Language list empty</option>
                   ) : (
                     currentLanguages.map((l) => (
                       <option key={l.code} value={l.code}>
-                        {l.name}
+                        {getLanguageDisplayName(l)}
                       </option>
                     ))
                   )}
@@ -658,14 +699,17 @@ export default function Translator({ apiMode, config }) {
                     className="form-select border-0 fw-bold text-primary w-100 bg-body text-body"
                     disabled={isLibreEmpty}
                     value={sourceLang}
-                    onChange={(e) => setSourceLang(e.target.value)}
+                    onChange={(e) => {
+                      setSourceLang(e.target.value);
+                      setDetectedLangInfo(null);
+                    }}
                   >
                     {isLibreEmpty ? (
                       <option>Language list empty</option>
                     ) : (
                       currentLanguages.map((l) => (
                         <option key={l.code} value={l.code}>
-                          {l.name}
+                          {getLanguageDisplayName(l)}
                         </option>
                       ))
                     )}
