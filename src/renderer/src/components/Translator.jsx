@@ -284,16 +284,26 @@ export default function Translator({ apiMode, config }) {
       } else {
         let systemPrompt = '';
 
+        const activeTargetName =
+          config.lmLanguages && config.lmLanguages[activeTarget]
+            ? config.lmLanguages[activeTarget]
+            : activeTarget;
+
+        const activeSourceName =
+          config.lmLanguages && config.lmLanguages[activeSource]
+            ? config.lmLanguages[activeSource]
+            : activeSource;
+
         if (isOrthographic) {
           systemPrompt =
             activeSource === 'auto'
               ? `${lmAutoInstruction}\n\n${lmHeader}`.trim()
-              : `${lmInstruction}\n\n${lmHeader}\n\nLanguage: ${activeSource}.`.trim();
+              : `${lmInstruction}\n\n${lmHeader}\n\nLanguage: ${activeSourceName}.`.trim();
         } else {
           systemPrompt =
             activeSource === 'auto'
-              ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${activeTarget}.`.trim()
-              : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${activeSource} to ${activeTarget}.`.trim();
+              ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${activeTargetName}.`.trim()
+              : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${activeSourceName} to ${activeTargetName}.`.trim();
         }
 
         const headers = { 'Content-Type': 'application/json' };
