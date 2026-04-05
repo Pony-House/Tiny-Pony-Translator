@@ -218,16 +218,23 @@ export default function Translator({ apiMode, config }) {
   /**
    * @param {string} textToTranslate
    * @param {AbortSignal} signal
+   * @param {string} activeSource
+   * @param {string} activeTarget
    * @returns {Promise<{text: string, alts: string[], detectedLanguage?: {language: string, confidence: number}}|null>}
    */
-  const executeSilentTranslation = async (textToTranslate, signal) => {
+  const executeSilentTranslation = async (
+    textToTranslate,
+    signal,
+    activeSource = sourceLang,
+    activeTarget = targetLang,
+  ) => {
     if (!textToTranslate.trim()) return null;
     try {
       if (apiMode === 'libre') {
         const bodyData = {
           q: textToTranslate,
-          source: sourceLang,
-          target: targetLang,
+          source: activeSource,
+          target: activeTarget,
           format: 'text',
           alternatives: 3,
         };
@@ -279,14 +286,14 @@ export default function Translator({ apiMode, config }) {
 
         if (isOrthographic) {
           systemPrompt =
-            sourceLang === 'auto'
+            activeSource === 'auto'
               ? `${lmAutoInstruction}\n\n${lmHeader}`.trim()
-              : `${lmInstruction}\n\n${lmHeader}\n\nLanguage: ${sourceLang}.`.trim();
+              : `${lmInstruction}\n\n${lmHeader}\n\nLanguage: ${activeSource}.`.trim();
         } else {
           systemPrompt =
-            sourceLang === 'auto'
-              ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${targetLang}.`.trim()
-              : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${sourceLang} to ${targetLang}.`.trim();
+            activeSource === 'auto'
+              ? `${lmAutoInstruction}\n\n${lmHeader}\n\nTarget Language: ${activeTarget}.`.trim()
+              : `${lmInstruction}\n\n${lmHeader}\n\nTranslate from ${activeSource} to ${activeTarget}.`.trim();
         }
 
         const headers = { 'Content-Type': 'application/json' };
@@ -356,9 +363,11 @@ export default function Translator({ apiMode, config }) {
 
   /**
    * @param {string} text
+   * @param {string} activeSource
+   * @param {string} activeTarget
    * @returns {Promise<void>}
    */
-  const executeTranslation = async (text) => {
+  const executeTranslation = async (text, activeSource = sourceLang, activeTarget = targetLang) => {
     if (!text.trim()) {
       setTranslatedText('');
       setTranslationOptions([]);
@@ -371,7 +380,7 @@ export default function Translator({ apiMode, config }) {
     setTranslationError(''); // Reset errors
 
     try {
-      const result = await executeSilentTranslation(text, null);
+      const result = await executeSilentTranslation(text, null, activeSource, activeTarget);
       setTranslatedText(result?.text || '');
       setTranslationOptions(result?.alts || []);
       setSelectedOptionIndex(0);
@@ -421,6 +430,12 @@ export default function Translator({ apiMode, config }) {
     setTranslationOptions([]);
     setSelectedOptionIndex(0);
     setTranslationError('');
+
+    // Automatically re-translate using the newly selected target language
+    if (sourceText.trim() !== '' && apiMode === 'libre') {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      executeTranslation(sourceText, sourceLang, value);
+    }
   };
 
   /**
