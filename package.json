@@ -71,7 +71,7 @@
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
     "electron-updater": "^6.3.9",
-    "tiny-essentials": "^1.25.3"
+    "tiny-essentials": "^1.26.1"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^2.1.0",
