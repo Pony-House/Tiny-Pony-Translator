@@ -11,6 +11,7 @@
   },
   "homepage": "https://github.com/Pony-House/Tiny-Pony-Translator",
   "license": "AGPL-3.0-only",
+  "ethereum": "jasmindreasond.x",
   "keywords": [
     "translator",
     "libretranslate",
